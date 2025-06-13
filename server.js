@@ -158,6 +158,63 @@ app.post('/api/test-booking', async (req, res) => {
   }
 });
 
+// EasyTable availability endpoint
+app.get('/api/availability', async (req, res) => {
+  const { date, persons, typeID } = req.query;
+  
+  if (!date || !persons) {
+    return res.status(400).json({
+      success: false,
+      error: 'Date and persons parameters are required'
+    });
+  }
+
+  // Check credentials
+  const apiKey = process.env.EASYTABLE_API_KEY?.trim();
+  const placeToken = process.env.EASYTABLE_PLACE_TOKEN?.trim();
+
+  if (!apiKey || !placeToken) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing API credentials'
+    });
+  }
+
+  try {
+    const params = new URLSearchParams({
+      date: date,
+      persons: persons.toString(),
+      distinct: '1' // Get distinct times only
+    });
+    
+    if (typeID) {
+      params.append('typeID', typeID.toString());
+    }
+
+    const response = await axios.get(
+      `https://api.easytable.com/v2/availability?${params}`,
+      {
+        headers: {
+          'X-Api-Key': apiKey,
+          'X-Place-Token': placeToken
+        },
+        timeout: 10000
+      }
+    );
+
+    res.json({
+      success: true,
+      data: response.data
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      status: error.response?.status || 0,
+      error: error.response?.data || error.message
+    });
+  }
+});
+
 // Serve the main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
