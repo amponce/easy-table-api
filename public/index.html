@@ -360,6 +360,26 @@
                         </a>
                     </div>
 
+                    <!-- Sandbox Environment Warning -->
+                    <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
+                        <div class="flex items-start space-x-3">
+                            <div class="flex-shrink-0">
+                                <i data-lucide="alert-triangle" class="w-5 h-5 text-orange-600"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-orange-800 text-sm mb-1">Sandbox Environment Notice</h4>
+                                <p class="text-sm text-orange-700 mb-2">
+                                    <strong>Important:</strong> For testing with the EasyTable sandbox environment, 
+                                    <strong>use a date from the past</strong> for successful API responses.
+                                </p>
+                                <p class="text-xs text-orange-600">
+                                    Example: Use <code class="bg-orange-100 px-1 rounded">2025-06-12</code> instead of future dates. 
+                                    This appears to be a requirement of their sandbox/testing environment.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <form id="bookingForm" class="space-y-4">
                         <!-- API Credentials -->
                         <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -518,9 +538,9 @@
             return new Date().toISOString().split('T')[0];
         }
 
-        // Generate unique external ID each time
+        // Generate unique external ID each time (matching working format)
         function generateUniqueID(prefix = 'probe') {
-            return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            return `${prefix}-${Date.now()}`;
         }
 
         function getPresets() {
@@ -529,14 +549,25 @@
             const uniqueId2 = generateUniqueID('probe');
             const uniqueId3 = generateUniqueID('probe');
             
+            // Generate slightly different times to avoid conflicts
+            const baseTime = new Date('2024-12-15T20:00:00');
+            const randomMinutes = Math.floor(Math.random() * 120); // 0-120 minutes
+            baseTime.setMinutes(baseTime.getMinutes() + randomMinutes);
+            const timeStr = baseTime.toTimeString().slice(0, 5); // HH:MM format
+            
+            // Generate slightly different customer details
+            const names = ['Alex Johnson', 'Sarah Wilson', 'Mike Chen', 'Emma Davis', 'Tom Brown'];
+            const randomName = names[Math.floor(Math.random() * names.length)];
+            const randomMobile = '1555' + Math.floor(Math.random() * 9000000 + 1000000); // Random 7-digit number
+            
             return {
                 split: {
                     externalID: uniqueId1,
-                    date: '2025-06-12',
-                    time: '20:00',
+                    date: '2024-12-15',
+                    time: timeStr,
                     persons: 2,
-                    name: 'Alex Johnson',
-                    mobile: '15551234567',
+                    name: randomName,
+                    mobile: randomMobile,
                     comment: 'Prefers indoor seating',
                     autoTable: true,
                     emailNotifications: true,
@@ -544,11 +575,11 @@
                 },
                 iso: {
                     externalID: uniqueId2,
-                    date: '2025-06-12T20:00:00Z',
+                    date: baseTime.toISOString(),
                     time: '',
                     persons: 2,
-                    name: 'Alex Johnson',
-                    mobile: '15551234567',
+                    name: randomName,
+                    mobile: randomMobile,
                     comment: 'Prefers indoor seating',
                     autoTable: true,
                     emailNotifications: true,
@@ -556,11 +587,11 @@
                 },
                 minimal: {
                     externalID: uniqueId3,
-                    date: '2025-06-12',
-                    time: '19:30',
-                    persons: 1,
-                    name: 'John Doe',
-                    mobile: '1234567890',
+                    date: '2024-12-15',
+                    time: timeStr,
+                    persons: Math.floor(Math.random() * 4) + 1, // 1-4 people
+                    name: randomName,
+                    mobile: randomMobile,
                     comment: '',
                     autoTable: true,
                     emailNotifications: true,
@@ -591,25 +622,32 @@
 
 
         function getFormData() {
-            const formData = new FormData(document.getElementById('bookingForm'));
-            const payload = {};
-            
-            // Get all form values
-            payload.externalID = document.getElementById('externalID').value;
-            payload.date = document.getElementById('date').value;
+            // Build payload in exact same order as working index.js
+            const base = {
+                externalID: document.getElementById('externalID').value,
+                persons: parseInt(document.getElementById('persons').value),
+                name: document.getElementById('name').value,
+                mobile: document.getElementById('mobile').value,
+                comment: document.getElementById('comment').value || 'Prefers indoor seating',
+                autoTable: document.getElementById('autoTable').checked,
+                emailNotifications: document.getElementById('emailNotifications').checked ? 1 : 0,
+                smsNotifications: document.getElementById('smsNotifications').checked ? 1 : 0
+            };
+
+            const dateValue = document.getElementById('date').value;
             const timeValue = document.getElementById('time').value;
-            if (timeValue) payload.time = timeValue;
             
-            payload.persons = parseInt(document.getElementById('persons').value);
-            payload.name = document.getElementById('name').value;
-            payload.mobile = document.getElementById('mobile').value;
-            
-            const comment = document.getElementById('comment').value;
-            if (comment) payload.comment = comment;
-            
-            payload.autoTable = document.getElementById('autoTable').checked;
-            payload.emailNotifications = document.getElementById('emailNotifications').checked ? 1 : 0;
-            payload.smsNotifications = document.getElementById('smsNotifications').checked ? 1 : 0;
+            // Build payload exactly like working index.js
+            const payload = timeValue ? 
+                {
+                    ...base,
+                    date: dateValue,
+                    time: timeValue
+                } : 
+                {
+                    ...base,
+                    date: dateValue
+                };
 
             const credentials = {
                 apiKey: document.getElementById('apiKey').value,
@@ -678,12 +716,37 @@
             submitBtn.disabled = true;
             lucide.createIcons();
             
+            // Add a small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Generate fresh unique ID, date, time, and customer data for each request
+            document.getElementById('externalID').value = generateUniqueID('probe');
+            
+            // Generate a more spread out random date (November-December 2024)
+            const randomMonth = Math.random() < 0.5 ? 11 : 12; // November or December
+            const maxDay = randomMonth === 11 ? 30 : 31;
+            const randomDay = Math.floor(Math.random() * maxDay) + 1;
+            const dateStr = `2024-${randomMonth.toString().padStart(2, '0')}-${randomDay.toString().padStart(2, '0')}`;
+            document.getElementById('date').value = dateStr;
+            
+            // Generate a more spread out random time (5PM-10PM)
+            const randomHour = Math.floor(Math.random() * 6) + 17; // 17-22 (5PM-10PM)
+            const randomMinute = Math.floor(Math.random() * 12) * 5; // 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55
+            const timeStr = `${randomHour.toString().padStart(2, '0')}:${randomMinute.toString().padStart(2, '0')}`;
+            document.getElementById('time').value = timeStr;
+            
+            // Generate random customer data with more variety
+            const names = ['Alex Johnson', 'Sarah Wilson', 'Mike Chen', 'Emma Davis', 'Tom Brown', 'Lisa Garcia', 'David Miller', 'Anna Taylor', 'Chris Lee', 'Maya Patel', 'James Rodriguez', 'Sophie Kim', 'Ryan O\'Connor', 'Zoe Martinez', 'Lucas Thompson'];
+            const randomName = names[Math.floor(Math.random() * names.length)];
+            const randomMobile = '1' + Math.floor(Math.random() * 900) + 200 + Math.floor(Math.random() * 9000000); // More varied phone numbers
+            const randomPersons = Math.floor(Math.random() * 8) + 1; // 1-8 people
+            
+            document.getElementById('name').value = randomName;
+            document.getElementById('mobile').value = randomMobile;
+            document.getElementById('persons').value = randomPersons;
+            
             // Generate fresh data for this request
             const { payload, credentials } = getFormData();
-            
-            // Debug the payload
-            console.log('📅 Today is:', getCurrentDate());
-            console.log('📋 Full payload being sent:', payload);
             
             try {
                 const response = await fetch('/api/test-booking', {
@@ -713,8 +776,19 @@
                     sentPayload: payload 
                 }, false);
             } finally {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
+                // Start 7-second countdown before allowing next request
+                let countdown = 7;
+                const countdownInterval = setInterval(() => {
+                    submitBtn.innerHTML = `<i data-lucide="clock" class="w-4 h-4 mr-2"></i>Wait ${countdown}s...`;
+                    lucide.createIcons();
+                    countdown--;
+                    
+                    if (countdown < 0) {
+                        clearInterval(countdownInterval);
+                        submitBtn.innerHTML = originalText;
+                        submitBtn.disabled = false;
+                    }
+                }, 1000);
             }
         });
 

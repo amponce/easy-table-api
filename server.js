@@ -12,6 +12,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -81,6 +83,16 @@ app.get('/api/schema', (req, res) => {
   res.json(schema);
 });
 
+app.get('/api/credentials-status', (req, res) => {
+  const hasServerCredentials = !!(process.env.EASYTABLE_API_KEY?.trim() && process.env.EASYTABLE_PLACE_TOKEN?.trim());
+  res.json({
+    hasServerCredentials,
+    message: hasServerCredentials 
+      ? 'Server credentials are configured' 
+      : 'No server credentials found - please provide them in the form'
+  });
+});
+
 app.post('/api/validate', (req, res) => {
   const { payload } = req.body;
   const valid = validate(payload);
@@ -115,27 +127,12 @@ app.post('/api/test-booking', async (req, res) => {
     });
   }
 
-  // Transform payload to match EasyTable API format
-  const easytablePayload = {
-    externalID: payload.externalID,
-    date: payload.date.includes('T') ? payload.date : `${payload.date}T${payload.time || '20:00'}:00.000Z`,
-    persons: payload.persons,
-    name: payload.name,
-    mobile: parseInt(payload.mobile),
-    autoTable: payload.autoTable,
-    emailNotifications: payload.emailNotifications,
-    smsNotifications: payload.smsNotifications
-  };
 
-  // Add optional fields if they exist
-  if (payload.comment) {
-    easytablePayload.comment = payload.comment;
-  }
 
   try {
     const response = await axios.post(
       'https://api.easytable.com/v2/bookings',
-      easytablePayload,
+      payload,
       {
         headers: {
           'Content-Type': 'application/json',
@@ -167,6 +164,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 EasyTable API Tester running at http://localhost:${PORT}`);
-  console.log(`📝 Open your browser to test the API`);
+  // Server started silently
 }); 

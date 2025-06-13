@@ -94,12 +94,12 @@ const payload =
   mode === 'split'
     ? {
         ...base,
-        date: '2025-06-14',       // plain date
+        date: '2024-12-15',       // plain date
         time: '20:00'             // separate 24-h time
       }
     : {
         ...base,
-        date: '2025-06-14T20:00:00Z' // ISO date-time
+        date: '2024-12-15T20:00:00Z' // ISO date-time
         // (no separate time field)
       };
 
