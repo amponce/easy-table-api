@@ -403,7 +403,7 @@
                                     <i data-lucide="calendar" class="w-3 h-3 inline mr-1"></i>
                                     Date *
                                 </label>
-                                <input type="date" id="date" required max="2024-12-31" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+                                <input type="date" id="date" required class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
                             </div>
                             <!-- Time -->
                             <div>
@@ -480,6 +480,10 @@
                                 <i data-lucide="calendar-search" class="w-4 h-4 mr-2"></i>
                                 Check Availability
                             </button>
+                            <button type="button" onclick="randomizeData()" class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+                                <i data-lucide="shuffle" class="w-4 h-4 mr-2"></i>
+                                Randomize Data
+                            </button>
                             <button type="button" onclick="validateOnly()" class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
                                 <i data-lucide="check-circle" class="w-4 h-4 mr-2"></i>
                                 Validate Only
@@ -548,10 +552,15 @@
             const randomName = names[Math.floor(Math.random() * names.length)];
             const randomMobile = '1555' + Math.floor(Math.random() * 9000000 + 1000000);
             
+            // Get tomorrow's date
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+            
             return {
                 split: {
                     externalID: uniqueId,
-                    date: '2024-12-15',
+                    date: tomorrowStr,
                     time: '20:00',
                     persons: 2,
                     name: randomName,
@@ -650,7 +659,7 @@
             if (!date || !persons) {
                 displayResults('❌ Missing Information', {
                     message: 'Please enter a date and number of persons to check availability',
-                    suggestion: 'Use the date picker to select a past date (2024 or earlier) and enter number of persons'
+                    suggestion: 'Use the date picker to select a date and enter number of persons'
                 }, false);
                 return;
             }
@@ -765,6 +774,44 @@
             document.getElementById('time').scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
+        function randomizeData() {
+            // Generate fresh unique ID
+            document.getElementById('externalID').value = generateUniqueID('probe');
+            
+            // Generate a random future date (next 30-60 days)
+            const today = new Date();
+            const randomDaysAhead = Math.floor(Math.random() * 30) + 30; // 30-60 days from now
+            const futureDate = new Date(today);
+            futureDate.setDate(today.getDate() + randomDaysAhead);
+            const dateStr = futureDate.toISOString().split('T')[0];
+            document.getElementById('date').value = dateStr;
+            
+            // Generate a random time (5PM-10PM)
+            const randomHour = Math.floor(Math.random() * 6) + 17; // 17-22 (5PM-10PM)
+            const randomMinute = Math.floor(Math.random() * 12) * 5; // 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55
+            const timeStr = `${randomHour.toString().padStart(2, '0')}:${randomMinute.toString().padStart(2, '0')}`;
+            document.getElementById('time').value = timeStr;
+            
+            // Generate random customer data
+            const names = ['Alex Johnson', 'Sarah Wilson', 'Mike Chen', 'Emma Davis', 'Tom Brown', 'Lisa Garcia', 'David Miller', 'Anna Taylor', 'Chris Lee', 'Maya Patel', 'James Rodriguez', 'Sophie Kim', 'Ryan O\'Connor', 'Zoe Martinez', 'Lucas Thompson'];
+            const randomName = names[Math.floor(Math.random() * names.length)];
+            const randomMobile = '1' + Math.floor(Math.random() * 900) + 200 + Math.floor(Math.random() * 9000000);
+            const randomPersons = Math.floor(Math.random() * 8) + 1; // 1-8 people
+            
+            document.getElementById('name').value = randomName;
+            document.getElementById('mobile').value = randomMobile;
+            document.getElementById('persons').value = randomPersons;
+            
+            displayResults('🎲 Data Randomized', {
+                message: 'Generated random booking data to avoid conflicts',
+                date: dateStr,
+                time: timeStr,
+                name: randomName,
+                persons: randomPersons,
+                suggestion: 'You can now test the API call with this random data'
+            }, true);
+        }
+
         async function validateOnly() {
             const { payload } = getFormData();
             
@@ -805,31 +852,8 @@
             // Add a small delay to avoid rate limiting
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Generate fresh unique ID, date, time, and customer data for each request
+            // Only generate fresh unique ID - keep user's manual selections
             document.getElementById('externalID').value = generateUniqueID('probe');
-            
-            // Generate a more spread out random date (November-December 2024)
-            const randomMonth = Math.random() < 0.5 ? 11 : 12; // November or December
-            const maxDay = randomMonth === 11 ? 30 : 31;
-            const randomDay = Math.floor(Math.random() * maxDay) + 1;
-            const dateStr = `2024-${randomMonth.toString().padStart(2, '0')}-${randomDay.toString().padStart(2, '0')}`;
-            document.getElementById('date').value = dateStr;
-            
-            // Generate a more spread out random time (5PM-10PM)
-            const randomHour = Math.floor(Math.random() * 6) + 17; // 17-22 (5PM-10PM)
-            const randomMinute = Math.floor(Math.random() * 12) * 5; // 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55
-            const timeStr = `${randomHour.toString().padStart(2, '0')}:${randomMinute.toString().padStart(2, '0')}`;
-            document.getElementById('time').value = timeStr;
-            
-            // Generate random customer data with more variety
-            const names = ['Alex Johnson', 'Sarah Wilson', 'Mike Chen', 'Emma Davis', 'Tom Brown', 'Lisa Garcia', 'David Miller', 'Anna Taylor', 'Chris Lee', 'Maya Patel', 'James Rodriguez', 'Sophie Kim', 'Ryan O\'Connor', 'Zoe Martinez', 'Lucas Thompson'];
-            const randomName = names[Math.floor(Math.random() * names.length)];
-            const randomMobile = '1' + Math.floor(Math.random() * 900) + 200 + Math.floor(Math.random() * 9000000); // More varied phone numbers
-            const randomPersons = Math.floor(Math.random() * 8) + 1; // 1-8 people
-            
-            document.getElementById('name').value = randomName;
-            document.getElementById('mobile').value = randomMobile;
-            document.getElementById('persons').value = randomPersons;
             
             // Generate fresh data for this request
             const { payload, credentials } = getFormData();
@@ -900,8 +924,6 @@
         // Load split preset by default
         window.addEventListener('load', () => {
             loadPreset('split');
-            // Set default date to a working past date
-            document.getElementById('date').value = '2024-12-15';
             // Initialize Lucide icons
             lucide.createIcons();
         });
