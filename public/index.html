@@ -353,13 +353,13 @@
                     </div>
 
                     <!-- Sandbox Environment Warning -->
-                    <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
+                    <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6 hidden">
                         <div class="flex items-start space-x-3">
                             <div class="flex-shrink-0">
                                 <i data-lucide="alert-triangle" class="w-5 h-5 text-orange-600"></i>
                             </div>
                             <div>
-                                <h4 class="font-semibold text-orange-800 text-sm mb-1">Sandbox Environment Notice</h4>
+                                <h4 class="font-semibold text-orange-800 text-sm mb-1 hidden">Sandbox Environment Notice</h4>
                                 <p class="text-sm text-orange-700 mb-2">
                                     <strong>Important:</strong> For testing with the EasyTable sandbox environment, 
                                     <strong>use a date from the past</strong> for successful API responses.
@@ -778,12 +778,11 @@
             // Generate fresh unique ID
             document.getElementById('externalID').value = generateUniqueID('probe');
             
-            // Generate a random future date (next 30-60 days)
-            const today = new Date();
-            const randomDaysAhead = Math.floor(Math.random() * 30) + 30; // 30-60 days from now
-            const futureDate = new Date(today);
-            futureDate.setDate(today.getDate() + randomDaysAhead);
-            const dateStr = futureDate.toISOString().split('T')[0];
+            // Generate a random date (November-December 2024 for demo API)
+            const randomMonth = Math.random() < 0.5 ? 11 : 12; // November or December
+            const maxDay = randomMonth === 11 ? 30 : 31;
+            const randomDay = Math.floor(Math.random() * maxDay) + 1;
+            const dateStr = `2024-${randomMonth.toString().padStart(2, '0')}-${randomDay.toString().padStart(2, '0')}`;
             document.getElementById('date').value = dateStr;
             
             // Generate a random time (5PM-10PM)
@@ -808,6 +807,7 @@
                 time: timeStr,
                 name: randomName,
                 persons: randomPersons,
+                mobile: randomMobile,
                 suggestion: 'You can now test the API call with this random data'
             }, true);
         }
@@ -924,6 +924,11 @@
         // Load split preset by default
         window.addEventListener('load', () => {
             loadPreset('split');
+            // Set default date to today and minimum date to today
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            document.getElementById('date').value = todayStr;
+            document.getElementById('date').min = todayStr;
             // Initialize Lucide icons
             lucide.createIcons();
         });
