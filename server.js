@@ -23,8 +23,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-
-
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -89,7 +87,7 @@ const schema = {
 const ajv = new Ajv();
 const validate = ajv.compile(schema);
 
-// API Routes
+// ===== UTILITY API ROUTES =====
 app.get('/api/schema', (req, res) => {
   res.json(schema);
 });
@@ -138,8 +136,6 @@ app.post('/api/test-booking', async (req, res) => {
     });
   }
 
-
-
   try {
     const response = await axios.post(
       'https://api.easytable.com/v2/bookings',
@@ -169,7 +165,9 @@ app.post('/api/test-booking', async (req, res) => {
   }
 });
 
-// EasyTable availability endpoint
+// ===== EASYTABLE API ROUTES =====
+
+// Standard EasyTable availability endpoint (GET)
 app.get('/api/availability', async (req, res) => {
   const { date, persons, typeID } = req.query;
   
@@ -570,11 +568,13 @@ app.post('/api/tools/create_booking', async (req, res) => {
   }
 });
 
+
 // Serve the main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Start server
 app.listen(PORT, () => {
   // Server started silently
 });

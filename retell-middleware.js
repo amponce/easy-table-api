@@ -154,11 +154,12 @@ export const extractBookingInfo = (transcript) => {
       break;
     }
   }
+
   
   return bookingInfo;
 };
-
 // Helper function to call your existing availability endpoint
+
 export const checkAvailability = async (date, persons, typeID = null) => {
   try {
     const apiKey = process.env.EASYTABLE_API_KEY?.trim();
@@ -202,7 +203,9 @@ export const checkAvailability = async (date, persons, typeID = null) => {
   }
 };
 
+
 // Helper function to create a real booking using EasyTable API directly
+
 export const createBooking = async (bookingData) => {
   try {
     const apiKey = process.env.EASYTABLE_API_KEY?.trim();
@@ -212,7 +215,9 @@ export const createBooking = async (bookingData) => {
       throw new Error('Missing EasyTable API credentials');
     }
     
+
     // Format the payload according to your schema
+
     const payload = {
       externalID: `retell-${Date.now()}`,
       date: bookingData.date,
@@ -271,6 +276,8 @@ export const formatDate = (dateString) => {
   // Handle MM/DD/YYYY format
   if (dateString.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
     const [month, day, year] = dateString.split('/');
+
+
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
   
@@ -301,6 +308,7 @@ export const formatTime = (timeString) => {
 };
 
 // Helper function to format available times for speech
+
 export const formatAvailableTimesForSpeech = (availabilityTimes) => {
   // Handle case where availabilityTimes is null, undefined, or empty
   if (!availabilityTimes || !Array.isArray(availabilityTimes) || availabilityTimes.length === 0) {
@@ -319,11 +327,13 @@ export const formatAvailableTimesForSpeech = (availabilityTimes) => {
     const period = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${displayHour}:${minutes} ${period}`;
+
   }).filter(time => time !== null); // Remove any null entries
   
   if (times.length === 0) {
     return "I'm sorry, there are no available times for that date and party size.";
   } else if (times.length === 1) {
+
     return `I have ${times[0]} available.`;
   } else if (times.length === 2) {
     return `I have ${times[0]} and ${times[1]} available.`;
@@ -334,4 +344,6 @@ export const formatAvailableTimesForSpeech = (availabilityTimes) => {
 };
 
 export { retell };
+
+
 
