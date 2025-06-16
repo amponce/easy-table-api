@@ -251,8 +251,42 @@ app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (re
         const userMessage = transcript?.filter(t => t.role === 'user').pop()?.content || '';
         const fullTranscript = transcript?.map(t => t.content).join(' ') || '';
         
+        console.log('🎯 Processing user message:', userMessage);
+        console.log('📝 Full transcript length:', fullTranscript.length);
+        
+        // Check conversation length to prevent infinite loops
+        const conversationTurns = transcript?.length || 0;
+        if (conversationTurns > 20) {
+          console.log('⏰ Conversation too long, ending call');
+          return res.json(createRetellResponse({
+            content: "I notice we've been talking for a while. Let me transfer you to our reservation team who can help you complete your booking. Thank you for your patience!",
+            end_call: true
+          }));
+        }
+        
+        // Check for conversation exit conditions
+        if (userMessage.toLowerCase().includes('goodbye') || 
+            userMessage.toLowerCase().includes('bye') || 
+            userMessage.toLowerCase().includes('thank you') ||
+            userMessage.toLowerCase().includes('that\'s all') ||
+            userMessage.toLowerCase().includes('no thanks')) {
+          return res.json(createRetellResponse({
+            content: "Thank you for calling Jeff's Table! Have a wonderful day!",
+            end_call: true
+          }));
+        }
+        
         // Extract booking information from the conversation
         const bookingInfo = extractBookingInfo(fullTranscript);
+        
+        // Count how many times we've asked for each piece of info to prevent loops
+        const askCounts = {
+          persons: (fullTranscript.match(/how many people|party size|how many guests/gi) || []).length,
+          date: (fullTranscript.match(/what date|which date|when would you like/gi) || []).length,
+          time: (fullTranscript.match(/what time|which time|when would you prefer/gi) || []).length,
+          name: (fullTranscript.match(/your name|could i get your name/gi) || []).length,
+          mobile: (fullTranscript.match(/phone number|mobile number|contact number/gi) || []).length
+        };
         
         // Determine what information is still needed
         const missing = [];
@@ -262,7 +296,23 @@ app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (re
         if (!bookingInfo.name) missing.push('name');
         if (!bookingInfo.mobile) missing.push('phone number');
         
+        console.log('❓ Missing info:', missing);
+        console.log('🔢 Ask counts:', askCounts);
+        
         let responseContent = '';
+        
+        // Check if we're stuck in a loop (asked same question 3+ times)
+        const maxAsks = 3;
+        const stuckOnQuestion = Object.entries(askCounts).find(([key, count]) => count >= maxAsks);
+        
+        if (stuckOnQuestion) {
+          console.log('🔄 Loop detected for:', stuckOnQuestion[0]);
+          responseContent = "I'm having trouble understanding. Let me transfer you to our reservation team who can help you directly. Please hold while I connect you.";
+          return res.json(createRetellResponse({
+            content: responseContent,
+            end_call: true
+          }));
+        }
         
         if (userMessage.toLowerCase().includes('availability') || userMessage.toLowerCase().includes('available')) {
           // User is asking about availability
@@ -281,6 +331,9 @@ app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (re
               } else {
                 // Pass the availabilityTimes array instead of the full data object
                 responseContent = formatAvailableTimesForSpeech(availabilityTimes);
+                if (availabilityTimes && availabilityTimes.length > 0) {
+                  responseContent += " Would you like to make a reservation for one of these times?";
+                }
               }
             } else {
               responseContent = "I'm having trouble checking availability right now. Could you try again or call us directly?";
@@ -296,25 +349,38 @@ app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (re
             time: formatTime(bookingInfo.time)
           };
           
+          console.log('🎯 Attempting booking with:', formattedBookingData);
+          
           const bookingResult = await createBooking(formattedBookingData);
           
           if (bookingResult.success) {
-            responseContent = `Perfect! I've successfully made your reservation for ${bookingInfo.persons} people on ${bookingInfo.date} at ${bookingInfo.time} under the name ${bookingInfo.name}. You'll receive a confirmation via text message. Is there anything else I can help you with?`;
+            responseContent = `Perfect! I've successfully made your reservation for ${bookingInfo.persons} people on ${bookingInfo.date} at ${bookingInfo.time} under the name ${bookingInfo.name}. You'll receive a confirmation via text message. Have a wonderful day!`;
+            return res.json(createRetellResponse({
+              content: responseContent,
+              end_call: true
+            }));
           } else {
             responseContent = `I'm sorry, I wasn't able to complete your reservation. This might be because that time slot is no longer available. Would you like me to check other available times for that date?`;
           }
         } else {
-          // Ask for missing information
-          if (missing.includes('party size')) {
+          // Ask for missing information in priority order, but avoid repeating questions
+          if (missing.includes('party size') && askCounts.persons < maxAsks) {
             responseContent = "How many people will be dining with us?";
-          } else if (missing.includes('date')) {
+          } else if (missing.includes('date') && askCounts.date < maxAsks) {
             responseContent = "What date would you like to make the reservation for?";
-          } else if (missing.includes('time')) {
+          } else if (missing.includes('time') && askCounts.time < maxAsks) {
             responseContent = "What time would you prefer for your reservation?";
-          } else if (missing.includes('name')) {
+          } else if (missing.includes('name') && askCounts.name < maxAsks) {
             responseContent = "Great! I have the details for your reservation. Could I get your name please?";
-          } else if (missing.includes('phone number')) {
+          } else if (missing.includes('phone number') && askCounts.mobile < maxAsks) {
             responseContent = "And could I get your phone number for the reservation?";
+          } else {
+            // If we've asked too many times, offer to transfer
+            responseContent = "I'm having some difficulty getting all the information I need. Let me transfer you to our reservation team who can help you complete your booking. Please hold.";
+            return res.json(createRetellResponse({
+              content: responseContent,
+              end_call: true
+            }));
           }
         }
         
@@ -372,11 +438,11 @@ app.post('/api/tools/get_availability', async (req, res) => {
       }
     }
     
-    // Ensure we're using the correct year (2025)
-    const currentYear = new Date().getFullYear();
-    if (date.startsWith('2024-')) {
-      date = date.replace('2024-', `${currentYear}-`);
-      console.log(`🔄 Updated date from 2024 to ${currentYear}: ${date}`);
+    // Handle "tonight" and "today" requests by using current date
+    if (date === 'tonight' || date === 'today') {
+      const today = new Date();
+      date = today.toISOString().split('T')[0];
+      console.log(`🔄 Converted "${req.body.date}" to current date: ${date}`);
     }
     
     console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
@@ -400,12 +466,26 @@ app.post('/api/tools/get_availability', async (req, res) => {
     // Check if restaurant is open and online booking is available
     if (!dayStatus || !onlineBooking) {
       console.log(`❌ Restaurant closed or online booking disabled: dayStatus=${dayStatus}, onlineBooking=${onlineBooking}`);
+      
+      // Instead of returning empty, suggest alternative dates
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+      
+      const dayAfter = new Date();
+      dayAfter.setDate(dayAfter.getDate() + 2);
+      const dayAfterStr = dayAfter.toISOString().split('T')[0];
+      
       return res.json({
         available: false,
-        alternatives: [],
+        alternatives: [
+          "We're closed that day. Try tomorrow or the day after.",
+          `Alternative dates: ${tomorrowStr} or ${dayAfterStr}`
+        ],
         dayStatus,
         onlineBooking,
-        availabilityTimes: []
+        availabilityTimes: [],
+        message: "Restaurant closed on requested date"
       });
     }
     
@@ -458,18 +538,26 @@ app.post('/api/tools/get_availability', async (req, res) => {
         alternatives,
         dayStatus,
         onlineBooking,
-        availabilityTimes
+        availabilityTimes,
+        message: `${time} is not available. Available times: ${alternatives.join(', ')}`
       });
     }
     
   } catch (error) {
     console.error('Tool error:', error);
+    
+    // Provide helpful alternatives even on error
     return res.json({
       available: false,
-      alternatives: [],
+      alternatives: [
+        "I'm having trouble checking availability right now.",
+        "Please call us directly at (555) 123-4567 to make a reservation.",
+        "Or try booking online at our website."
+      ],
       dayStatus: false,
       onlineBooking: false,
-      availabilityTimes: []
+      availabilityTimes: [],
+      error: "System error occurred"
     });
   }
 });
@@ -552,11 +640,11 @@ app.post('/api/tools/create_booking', async (req, res) => {
       }
     }
     
-    // Ensure we're using the correct year (2025)
-    const currentYear = new Date().getFullYear();
-    if (completeBookingData.date.startsWith('2024-')) {
-      completeBookingData.date = completeBookingData.date.replace('2024-', `${currentYear}-`);
-      console.log(`🔄 Updated booking date from 2024 to ${currentYear}: ${completeBookingData.date}`);
+    // Handle relative dates
+    if (completeBookingData.date === 'tonight' || completeBookingData.date === 'today') {
+      const today = new Date();
+      completeBookingData.date = today.toISOString().split('T')[0];
+      console.log(`🔄 Converted relative date to: ${completeBookingData.date}`);
     }
     
     console.log('📝 Processed booking data:', completeBookingData);

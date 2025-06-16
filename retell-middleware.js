@@ -66,75 +66,91 @@ export const extractBookingInfo = (transcript) => {
     comment: ''
   };
   
-  // Extract patterns from transcript - improved regex patterns
+  // Join all transcript content for analysis
+  const fullText = Array.isArray(transcript) 
+    ? transcript.map(t => t.content || '').join(' ')
+    : transcript || '';
+  
+  console.log('🔍 Extracting from transcript:', fullText);
+  
+  // Extract patterns from transcript - improved and more reliable patterns
   
   // Name extraction - more flexible patterns
   const namePatterns = [
-    /(?:name is|i'm|my name is|this is|i am)\s+([a-zA-Z\s]{2,30})(?:\s|$|\.|\,)/i,
-    /^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\s|$|\.|\,)/,  // First Last format
+    /(?:name is|i'm|my name is|this is|i am|call me)\s+([a-zA-Z\s]{2,30})(?:\s|$|\.|\,|!|\?)/i,
+    /^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\s|$|\.|\,)/,  // First Last format at start
+    /\b([A-Z][a-z]+\s+[A-Z][a-z]+)\b/,  // First Last format anywhere
   ];
   
   for (const pattern of namePatterns) {
-    const match = transcript.match(pattern);
+    const match = fullText.match(pattern);
     if (match && match[1]) {
       const name = match[1].trim();
-      // Avoid capturing common words
-      if (!name.match(/\b(phone|number|mobile|reservation|table|people|person|guest|today|tomorrow|time|at|for|and|my|is)\b/i)) {
+      // Avoid capturing common words and ensure reasonable length
+      if (name.length >= 2 && name.length <= 30 && 
+          !name.match(/\b(phone|number|mobile|reservation|table|people|person|guest|today|tomorrow|time|at|for|and|my|is|the|yes|no|sure|okay|great|perfect)\b/i)) {
         bookingInfo.name = name;
+        console.log('✅ Extracted name:', name);
         break;
       }
     }
   }
   
-  // Phone number extraction - more flexible
+  // Phone number extraction - more reliable
   const phonePatterns = [
-    /(?:phone|number|mobile|call me at)\s*(?:is|at)?\s*([0-9\s\-\+\(\)]{7,15})/i,
-    /\b([0-9]{3}[\-\s]?[0-9]{3}[\-\s]?[0-9]{4})\b/,  // Standard US format
+    /(?:phone|number|mobile|call me at|reach me at)\s*(?:is|at)?\s*([0-9\s\-\+\(\)]{10,15})/i,
+    /\b([0-9]{3}[\-\s\.]?[0-9]{3}[\-\s\.]?[0-9]{4})\b/,  // Standard US format
     /\b([0-9]{10,11})\b/  // 10-11 digit numbers
   ];
   
   for (const pattern of phonePatterns) {
-    const match = transcript.match(pattern);
+    const match = fullText.match(pattern);
     if (match && match[1]) {
       const phone = match[1].replace(/[^0-9]/g, '');
-      if (phone.length >= 10) {
+      if (phone.length >= 10 && phone.length <= 11) {
         bookingInfo.mobile = phone;
+        console.log('✅ Extracted phone:', phone);
         break;
       }
     }
   }
   
-  // Party size extraction
+  // Party size extraction - more specific
   const personsPatterns = [
     /(?:for|party of|table for|reservation for)\s*(\d+)\s*(?:people|persons|guests|ppl)?/i,
     /(\d+)\s*(?:people|persons|guests|ppl)/i,
-    /\b(\d+)\s*(?:of us|in our party)/i
+    /\b(\d+)\s*(?:of us|in our party)/i,
+    /just\s*(\d+)/i,
+    /(\d+)\s*(?:person|guest)/i
   ];
   
   for (const pattern of personsPatterns) {
-    const match = transcript.match(pattern);
+    const match = fullText.match(pattern);
     if (match && match[1]) {
       const persons = parseInt(match[1]);
       if (persons > 0 && persons <= 20) { // Reasonable range
         bookingInfo.persons = persons;
+        console.log('✅ Extracted party size:', persons);
         break;
       }
     }
   }
   
-  // Date extraction
+  // Date extraction - more comprehensive
   const datePatterns = [
     /\b(today|tonight)\b/i,
     /\b(tomorrow)\b/i,
     /(\d{4}-\d{2}-\d{2})/,
     /(\d{1,2}\/\d{1,2}\/\d{4})/,
-    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+    /\b(next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/i
   ];
   
   for (const pattern of datePatterns) {
-    const match = transcript.match(pattern);
+    const match = fullText.match(pattern);
     if (match && match[1]) {
       bookingInfo.date = match[1];
+      console.log('✅ Extracted date:', match[1]);
       break;
     }
   }
@@ -148,15 +164,18 @@ export const extractBookingInfo = (transcript) => {
   ];
   
   for (const pattern of timePatterns) {
-    const match = transcript.match(pattern);
+    const match = fullText.match(pattern);
     if (match && match[1]) {
       bookingInfo.time = match[1];
+      console.log('✅ Extracted time:', match[1]);
       break;
     }
   }
   
+  console.log('📋 Final extracted info:', bookingInfo);
   return bookingInfo;
 };
+
 // Helper function to call your existing availability endpoint
 
 export const checkAvailability = async (date, persons, typeID = null) => {
@@ -214,21 +233,34 @@ export const createBooking = async (bookingData) => {
       throw new Error('Missing EasyTable API credentials');
     }
     
-
+    // Validate required fields
+    const required = ['date', 'time', 'persons', 'name', 'mobile'];
+    const missing = required.filter(field => !bookingData[field]);
+    
+    if (missing.length > 0) {
+      return {
+        success: false,
+        status: 400,
+        error: `Missing required fields: ${missing.join(', ')}`,
+        message: 'Validation failed'
+      };
+    }
+    
     // Format the payload according to your schema
-
     const payload = {
-      externalID: `retell-${Date.now()}`,
+      externalID: bookingData.externalID || `retell-${Date.now()}`,
       date: bookingData.date,
       time: bookingData.time,
-      persons: bookingData.persons,
-      name: bookingData.name,
-      mobile: bookingData.mobile,
+      persons: parseInt(bookingData.persons),
+      name: bookingData.name.trim(),
+      mobile: bookingData.mobile.replace(/[^0-9]/g, ''), // Clean phone number
       comment: bookingData.comment || 'Booking made via Retell AI phone system',
-      autoTable: true,
-      emailNotifications: 1,
-      smsNotifications: 1
+      autoTable: bookingData.autoTable !== undefined ? bookingData.autoTable : true,
+      emailNotifications: bookingData.emailNotifications !== undefined ? bookingData.emailNotifications : 1,
+      smsNotifications: bookingData.smsNotifications !== undefined ? bookingData.smsNotifications : 1
     };
+    
+    console.log('📤 Sending booking payload:', payload);
     
     const response = await axios.post(
       'https://api.easytable.com/v2/bookings',
@@ -239,9 +271,11 @@ export const createBooking = async (bookingData) => {
           'X-Api-Key': apiKey,
           'X-Place-Token': placeToken
         },
-        timeout: 10000
+        timeout: 15000 // Increased timeout
       }
     );
+    
+    console.log('✅ Booking response:', response.status, response.data);
     
     return {
       success: true,
@@ -249,6 +283,8 @@ export const createBooking = async (bookingData) => {
       data: response.data
     };
   } catch (error) {
+    console.error('❌ Booking error:', error.response?.data || error.message);
+    
     return {
       success: false,
       status: error.response?.status || 0,
@@ -308,34 +344,45 @@ export const formatTime = (timeString) => {
 
 // Helper function to format available times for speech
 export const formatAvailableTimesForSpeech = (availabilityTimes) => {
+  console.log('🎤 Formatting times for speech:', availabilityTimes);
+  
   // Handle case where availabilityTimes is null, undefined, or empty
   if (!availabilityTimes || !Array.isArray(availabilityTimes) || availabilityTimes.length === 0) {
-    return "I'm sorry, there are no available times for that date and party size.";
+    return "I'm sorry, there are no available times for that date and party size. Would you like to try a different date?";
   }
   
-  const times = availabilityTimes.map(slot => {
-    // Ensure slot has a time property
-    if (!slot || !slot.time) {
-      return null;
-    }
-    
-    // Convert 24-hour to 12-hour format for speech
-    const [hours, minutes] = slot.time.split(':');
-    const hour = parseInt(hours);
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    return `${displayHour}:${minutes} ${period}`;
-  }).filter(time => time !== null); // Remove any null entries
+  const times = availabilityTimes
+    .filter(slot => slot && slot.time) // Filter out invalid slots first
+    .map(slot => {
+      try {
+        // Convert 24-hour to 12-hour format for speech
+        const [hours, minutes] = slot.time.split(':');
+        const hour = parseInt(hours);
+        const period = hour >= 12 ? 'PM' : 'AM';
+        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        return `${displayHour}:${minutes} ${period}`;
+      } catch (error) {
+        console.error('❌ Error formatting time:', slot.time, error);
+        return null;
+      }
+    })
+    .filter(time => time !== null) // Remove any null entries
+    .slice(0, 10); // Limit to first 10 times to avoid overwhelming speech
   
   if (times.length === 0) {
-    return "I'm sorry, there are no available times for that date and party size.";
+    return "I'm sorry, there are no available times for that date and party size. Would you like to try a different date?";
   } else if (times.length === 1) {
     return `I have ${times[0]} available.`;
   } else if (times.length === 2) {
     return `I have ${times[0]} and ${times[1]} available.`;
-  } else {
+  } else if (times.length <= 5) {
     const lastTime = times.pop();
     return `I have ${times.join(', ')}, and ${lastTime} available.`;
+  } else {
+    // For many times, group them better
+    const firstFew = times.slice(0, 3);
+    const remaining = times.length - 3;
+    return `I have several times available including ${firstFew.join(', ')}, and ${remaining} more options. Which time works best for you?`;
   }
 };
 
