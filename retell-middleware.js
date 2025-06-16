@@ -259,7 +259,7 @@ export const handleAvailabilityCheck = async (req, res) => {
   try {
     // Handle both Retell formats (direct params or nested under args)
     const params = req.body.args || req.body;
-    let { date, persons, time } = params;
+    let { date, persons } = params;
     
     if (!date || !persons) {
       return res.status(400).json({ 
