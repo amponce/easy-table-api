@@ -427,10 +427,15 @@ app.post('/api/tools/get_availability', async (req, res) => {
   try {
     let { date, persons, time } = req.body;
     
+    console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
+    console.log(`🔍 Original request body:`, JSON.stringify(req.body, null, 2));
+    console.log(`🔍 Request headers:`, JSON.stringify(req.headers, null, 2));
+    
     if (!date || !persons) {
+      console.log('❌ Missing required parameters');
       return res.json({
         available: false,
-        alternatives: [],
+        alternatives: ["Please provide both date and number of people"],
         dayStatus: false,
         onlineBooking: false,
         availabilityTimes: []
@@ -452,8 +457,6 @@ app.post('/api/tools/get_availability', async (req, res) => {
       console.log(`🔄 Converted "${req.body.date}" to current date: ${date}`);
     }
     
-    console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
-    console.log(`🔍 Original request body:`, JSON.stringify(req.body, null, 2));
     console.log(`🔍 Debug: Calling checkAvailability with date=${date}, persons=${persons}`);
     
     const availability = await checkAvailability(date, persons);
