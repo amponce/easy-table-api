@@ -66,21 +66,94 @@ export const extractBookingInfo = (transcript) => {
     comment: ''
   };
   
-  // Extract patterns from transcript
-  const nameMatch = transcript.match(/(?:name is|i'm|my name is)\s+([a-zA-Z\s]+)/i);
-  if (nameMatch) bookingInfo.name = nameMatch[1].trim();
+  // Extract patterns from transcript - improved regex patterns
   
-  const phoneMatch = transcript.match(/(?:phone|number|mobile)\s*(?:is)?\s*([0-9\s\-\+\(\)]+)/i);
-  if (phoneMatch) bookingInfo.mobile = phoneMatch[1].replace(/[^0-9]/g, '');
+  // Name extraction - more flexible patterns
+  const namePatterns = [
+    /(?:name is|i'm|my name is|this is|i am)\s+([a-zA-Z\s]{2,30})(?:\s|$|\.|\,)/i,
+    /^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\s|$|\.|\,)/,  // First Last format
+  ];
   
-  const personsMatch = transcript.match(/(?:for|party of|table for)\s*(\d+)\s*(?:people|persons|guests)?/i);
-  if (personsMatch) bookingInfo.persons = parseInt(personsMatch[1]);
+  for (const pattern of namePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      const name = match[1].trim();
+      // Avoid capturing common words
+      if (!name.match(/\b(phone|number|mobile|reservation|table|people|person|guest|today|tomorrow|time|at|for|and|my|is)\b/i)) {
+        bookingInfo.name = name;
+        break;
+      }
+    }
+  }
   
-  const dateMatch = transcript.match(/(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}|today|tomorrow)/i);
-  if (dateMatch) bookingInfo.date = dateMatch[1];
+  // Phone number extraction - more flexible
+  const phonePatterns = [
+    /(?:phone|number|mobile|call me at)\s*(?:is|at)?\s*([0-9\s\-\+\(\)]{7,15})/i,
+    /\b([0-9]{3}[\-\s]?[0-9]{3}[\-\s]?[0-9]{4})\b/,  // Standard US format
+    /\b([0-9]{10,11})\b/  // 10-11 digit numbers
+  ];
   
-  const timeMatch = transcript.match(/(\d{1,2}:?\d{0,2}\s*(?:am|pm|AM|PM))/i);
-  if (timeMatch) bookingInfo.time = timeMatch[1];
+  for (const pattern of phonePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      const phone = match[1].replace(/[^0-9]/g, '');
+      if (phone.length >= 10) {
+        bookingInfo.mobile = phone;
+        break;
+      }
+    }
+  }
+  
+  // Party size extraction
+  const personsPatterns = [
+    /(?:for|party of|table for|reservation for)\s*(\d+)\s*(?:people|persons|guests|ppl)?/i,
+    /(\d+)\s*(?:people|persons|guests|ppl)/i,
+    /\b(\d+)\s*(?:of us|in our party)/i
+  ];
+  
+  for (const pattern of personsPatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      const persons = parseInt(match[1]);
+      if (persons > 0 && persons <= 20) { // Reasonable range
+        bookingInfo.persons = persons;
+        break;
+      }
+    }
+  }
+  
+  // Date extraction
+  const datePatterns = [
+    /\b(today|tonight)\b/i,
+    /\b(tomorrow)\b/i,
+    /(\d{4}-\d{2}-\d{2})/,
+    /(\d{1,2}\/\d{1,2}\/\d{4})/,
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+  ];
+  
+  for (const pattern of datePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      bookingInfo.date = match[1];
+      break;
+    }
+  }
+  
+  // Time extraction - improved patterns
+  const timePatterns = [
+    /(?:at|for|around)\s*(\d{1,2}:?\d{0,2}\s*(?:am|pm|AM|PM))/i,
+    /\b(\d{1,2}:?\d{0,2}\s*(?:am|pm|AM|PM))\b/i,
+    /(?:at|for|around)\s*(\d{1,2})\s*(?:o'clock|oclock)/i,
+    /\b(\d{1,2}:\d{2})\b/  // 24-hour format
+  ];
+  
+  for (const pattern of timePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      bookingInfo.time = match[1];
+      break;
+    }
+  }
   
   return bookingInfo;
 };
@@ -228,21 +301,29 @@ export const formatTime = (timeString) => {
 };
 
 // Helper function to format available times for speech
-export const formatAvailableTimesForSpeech = (availabilityData) => {
-  if (!availabilityData || !availabilityData.length) {
+export const formatAvailableTimesForSpeech = (availabilityTimes) => {
+  // Handle case where availabilityTimes is null, undefined, or empty
+  if (!availabilityTimes || !Array.isArray(availabilityTimes) || availabilityTimes.length === 0) {
     return "I'm sorry, there are no available times for that date and party size.";
   }
   
-  const times = availabilityData.map(slot => {
+  const times = availabilityTimes.map(slot => {
+    // Ensure slot has a time property
+    if (!slot || !slot.time) {
+      return null;
+    }
+    
     // Convert 24-hour to 12-hour format for speech
     const [hours, minutes] = slot.time.split(':');
     const hour = parseInt(hours);
     const period = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${displayHour}:${minutes} ${period}`;
-  });
+  }).filter(time => time !== null); // Remove any null entries
   
-  if (times.length === 1) {
+  if (times.length === 0) {
+    return "I'm sorry, there are no available times for that date and party size.";
+  } else if (times.length === 1) {
     return `I have ${times[0]} available.`;
   } else if (times.length === 2) {
     return `I have ${times[0]} and ${times[1]} available.`;

@@ -267,7 +267,17 @@ app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (re
             const availability = await checkAvailability(formattedDate, bookingInfo.persons);
             
             if (availability.success) {
-              responseContent = formatAvailableTimesForSpeech(availability.data);
+              // Check if the restaurant is open and online booking is available
+              const { dayStatus, onlineBooking, availabilityTimes } = availability.data;
+              
+              if (!dayStatus) {
+                responseContent = "I'm sorry, the restaurant is closed on that date. Could you try a different date?";
+              } else if (!onlineBooking) {
+                responseContent = "Online booking is not available for that date. Please call the restaurant directly to make a reservation.";
+              } else {
+                // Pass the availabilityTimes array instead of the full data object
+                responseContent = formatAvailableTimesForSpeech(availabilityTimes);
+              }
             } else {
               responseContent = "I'm having trouble checking availability right now. Could you try again or call us directly?";
             }
@@ -335,6 +345,123 @@ app.post('/api/retell-availability', async (req, res) => {
   return res.json(availability);
 });
 
+// Tool endpoint for Retell AI - handles date format conversion and returns Retell-compatible format
+app.post('/api/tools/get_availability', async (req, res) => {
+  try {
+    let { date, persons, time } = req.body;
+    
+    if (!date || !persons) {
+      return res.json({
+        available: false,
+        alternatives: [],
+        dayStatus: false,
+        onlineBooking: false,
+        availabilityTimes: []
+      });
+    }
+    
+    // Convert date format from YYYY/MM/DD to YYYY-MM-DD
+    if (date.includes('/')) {
+      const parts = date.split('/');
+      if (parts.length === 3) {
+        date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+    
+    console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
+    
+    const availability = await checkAvailability(date, persons);
+    
+    if (!availability.success) {
+      console.log(`❌ Availability check failed: ${availability.error}`);
+      return res.json({
+        available: false,
+        alternatives: [],
+        dayStatus: false,
+        onlineBooking: false,
+        availabilityTimes: []
+      });
+    }
+    
+    const { dayStatus, onlineBooking, availabilityTimes } = availability.data;
+    
+    // Check if restaurant is open and online booking is available
+    if (!dayStatus || !onlineBooking) {
+      console.log(`❌ Restaurant closed or online booking disabled: dayStatus=${dayStatus}, onlineBooking=${onlineBooking}`);
+      return res.json({
+        available: false,
+        alternatives: [],
+        dayStatus,
+        onlineBooking,
+        availabilityTimes: []
+      });
+    }
+    
+    // Check if the specific requested time is available
+    const requestedTimeAvailable = availabilityTimes && availabilityTimes.some(slot => slot.time === time);
+    
+    if (requestedTimeAvailable) {
+      console.log(`✅ Requested time ${time} is available!`);
+      return res.json({
+        available: true,
+        alternatives: [],
+        dayStatus,
+        onlineBooking,
+        availabilityTimes
+      });
+    } else {
+      // Find alternative times (closest to requested time)
+      let alternatives = [];
+      if (availabilityTimes && availabilityTimes.length > 0) {
+        // Get times within 2 hours of requested time
+        const requestedHour = parseInt(time.split(':')[0]);
+        const requestedMinute = parseInt(time.split(':')[1] || '0');
+        const requestedTotalMinutes = requestedHour * 60 + requestedMinute;
+        
+        const nearbyTimes = availabilityTimes
+          .map(slot => {
+            const [hour, minute] = slot.time.split(':').map(Number);
+            const totalMinutes = hour * 60 + minute;
+            const diff = Math.abs(totalMinutes - requestedTotalMinutes);
+            return { ...slot, diff };
+          })
+          .filter(slot => slot.diff <= 120) // Within 2 hours
+          .sort((a, b) => a.diff - b.diff)
+          .slice(0, 5) // Top 5 closest times
+          .map(slot => {
+            // Convert to 12-hour format for speech
+            const [hours, minutes] = slot.time.split(':');
+            const hour = parseInt(hours);
+            const period = hour >= 12 ? 'PM' : 'AM';
+            const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+            return `${displayHour}:${minutes} ${period}`;
+          });
+        
+        alternatives = nearbyTimes;
+      }
+      
+      console.log(`❌ Requested time ${time} not available. Alternatives: ${alternatives.join(', ')}`);
+      return res.json({
+        available: false,
+        alternatives,
+        dayStatus,
+        onlineBooking,
+        availabilityTimes
+      });
+    }
+    
+  } catch (error) {
+    console.error('Tool error:', error);
+    return res.json({
+      available: false,
+      alternatives: [],
+      dayStatus: false,
+      onlineBooking: false,
+      availabilityTimes: []
+    });
+  }
+});
+
 // Endpoint to create booking via Retell (can be called directly)
 app.post('/api/retell-booking', async (req, res) => {
   const bookingData = req.body;
@@ -352,6 +479,95 @@ app.post('/api/retell-booking', async (req, res) => {
   
   const result = await createBooking(bookingData);
   return res.json(result);
+});
+
+// Tool endpoint for Retell AI - create booking with proper response format
+app.post('/api/tools/create_booking', async (req, res) => {
+  try {
+    console.log('🔧 Retell create_booking tool called:', req.body);
+    
+    const bookingData = req.body;
+    
+    // Validate required fields according to your schema
+    const required = ['externalID', 'date', 'time', 'persons', 'name', 'mobile'];
+    const missing = required.filter(field => !bookingData[field]);
+    
+    if (missing.length > 0) {
+      console.log(`❌ Missing required fields: ${missing.join(', ')}`);
+      return res.status(400).json({
+        status: 400,
+        confirmation: null,
+        error: `Missing required fields: ${missing.join(', ')}`
+      });
+    }
+    
+    // Validate mobile phone pattern (10-11 digits)
+    const mobilePattern = /^[0-9]{10,11}$/;
+    if (!mobilePattern.test(bookingData.mobile)) {
+      console.log(`❌ Invalid mobile format: ${bookingData.mobile}`);
+      return res.status(400).json({
+        status: 400,
+        confirmation: null,
+        error: 'Mobile number must be 10-11 digits'
+      });
+    }
+    
+    // Validate time pattern (HH:MM 24-hour format)
+    const timePattern = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timePattern.test(bookingData.time)) {
+      console.log(`❌ Invalid time format: ${bookingData.time}`);
+      return res.status(400).json({
+        status: 400,
+        confirmation: null,
+        error: 'Time must be in HH:MM format (24-hour)'
+      });
+    }
+    
+    // Set defaults for optional fields
+    const completeBookingData = {
+      ...bookingData,
+      comment: bookingData.comment || '',
+      autoTable: bookingData.autoTable !== undefined ? bookingData.autoTable : true,
+      emailNotifications: bookingData.emailNotifications !== undefined ? bookingData.emailNotifications : 1,
+      smsNotifications: bookingData.smsNotifications !== undefined ? bookingData.smsNotifications : 1
+    };
+    
+    // Convert date to proper format if needed
+    if (completeBookingData.date.includes('/')) {
+      const parts = completeBookingData.date.split('/');
+      if (parts.length === 3) {
+        completeBookingData.date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+    }
+    
+    console.log('📝 Processed booking data:', completeBookingData);
+    
+    const result = await createBooking(completeBookingData);
+    
+    if (result.success) {
+      console.log('✅ Booking created successfully:', result.data);
+      return res.status(200).json({
+        status: 200,
+        confirmation: result.data?.confirmation || result.data?.id || 'Booking confirmed',
+        message: 'Booking created successfully'
+      });
+    } else {
+      console.log('❌ Booking failed:', result.error);
+      return res.status(400).json({
+        status: 400,
+        confirmation: null,
+        error: result.error || 'Booking failed'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Create booking tool error:', error);
+    return res.status(500).json({
+      status: 500,
+      confirmation: null,
+      error: 'Internal server error'
+    });
+  }
 });
 
 // Serve the main page
