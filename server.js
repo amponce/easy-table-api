@@ -331,8 +331,39 @@ app.post('/api/retell-availability', async (req, res) => {
     });
   }
   
-  const availability = await checkAvailability(date, persons, typeID);
+  // Format the date properly
+  const formattedDate = formatDate(date);
+  const availability = await checkAvailability(formattedDate, persons, typeID);
   return res.json(availability);
+});
+
+// Enhanced availability endpoint that can handle both GET and POST with proper date formatting
+app.all('/api/availability-retell', async (req, res) => {
+  // Get parameters from either query (GET) or body (POST)
+  const params = req.method === 'GET' ? req.query : req.body;
+  const { date, persons, typeID } = params;
+  
+  if (!date || !persons) {
+    return res.status(400).json({
+      success: false,
+      error: 'Date and persons are required'
+    });
+  }
+  
+  try {
+    // Format the date properly to handle different formats
+    const formattedDate = formatDate(date.toString());
+    console.log(`Checking availability for date: ${date} -> formatted: ${formattedDate}, persons: ${persons}`);
+    
+    const availability = await checkAvailability(formattedDate, parseInt(persons), typeID ? parseInt(typeID) : null);
+    return res.json(availability);
+  } catch (error) {
+    console.error('Availability check error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 });
 
 // Endpoint to create booking via Retell (can be called directly)
