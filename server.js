@@ -380,6 +380,7 @@ app.post('/api/tools/get_availability', async (req, res) => {
     }
     
     console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
+    console.log(`🔍 Debug: Calling checkAvailability with date=${date}, persons=${persons}`);
     
     const availability = await checkAvailability(date, persons);
     
