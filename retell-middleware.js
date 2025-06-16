@@ -201,12 +201,6 @@ export const formatDate = (dateString) => {
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
   
-  // Handle MM/DD/YYYY format
-  if (dateString.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
-    const [month, day, year] = dateString.split('/');
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  
   // Return as-is if already in YYYY-MM-DD format
   return dateString;
 };
