@@ -234,8 +234,14 @@ app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (re
     // Handle different Retell events
     switch (event) {
       case 'call_started':
+        const currentDate = new Date().toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
         return res.json(createRetellResponse({
-          content: "Hello! Welcome to our restaurant. I can help you make a reservation. How many people will be dining with us?"
+          content: `Hello! Welcome to Jeff's Table. Today is ${currentDate}. I can help you make a reservation. How many people will be dining with us?`
         }));
         
       case 'call_ended':
@@ -364,6 +370,13 @@ app.post('/api/tools/get_availability', async (req, res) => {
       if (parts.length === 3) {
         date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
       }
+    }
+    
+    // Ensure we're using the correct year (2025)
+    const currentYear = new Date().getFullYear();
+    if (date.startsWith('2024-')) {
+      date = date.replace('2024-', `${currentYear}-`);
+      console.log(`🔄 Updated date from 2024 to ${currentYear}: ${date}`);
     }
     
     console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
@@ -536,6 +549,13 @@ app.post('/api/tools/create_booking', async (req, res) => {
       if (parts.length === 3) {
         completeBookingData.date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
       }
+    }
+    
+    // Ensure we're using the correct year (2025)
+    const currentYear = new Date().getFullYear();
+    if (completeBookingData.date.startsWith('2024-')) {
+      completeBookingData.date = completeBookingData.date.replace('2024-', `${currentYear}-`);
+      console.log(`🔄 Updated booking date from 2024 to ${currentYear}: ${completeBookingData.date}`);
     }
     
     console.log('📝 Processed booking data:', completeBookingData);
