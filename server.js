@@ -415,6 +415,13 @@ app.post('/api/retell-availability', async (req, res) => {
   return res.json(availability);
 });
 
+// Debug endpoint to see what Retell is sending
+app.post('/api/debug/retell-call', (req, res) => {
+  console.log('🐛 DEBUG: Retell called with:', JSON.stringify(req.body, null, 2));
+  console.log('🐛 DEBUG: Headers:', JSON.stringify(req.headers, null, 2));
+  res.json({ received: true, body: req.body, timestamp: new Date().toISOString() });
+});
+
 // Tool endpoint for Retell AI - handles date format conversion and returns Retell-compatible format
 app.post('/api/tools/get_availability', async (req, res) => {
   try {
@@ -446,9 +453,11 @@ app.post('/api/tools/get_availability', async (req, res) => {
     }
     
     console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
+    console.log(`🔍 Original request body:`, JSON.stringify(req.body, null, 2));
     console.log(`🔍 Debug: Calling checkAvailability with date=${date}, persons=${persons}`);
     
     const availability = await checkAvailability(date, persons);
+    console.log(`🔍 Raw availability response:`, JSON.stringify(availability, null, 2));
     
     if (!availability.success) {
       console.log(`❌ Availability check failed: ${availability.error}`);
