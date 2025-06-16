@@ -230,7 +230,7 @@ app.get('/api/availability', async (req, res) => {
 // ===== RETELL AI ENDPOINTS =====
 
 // Main webhook endpoint for Retell AI conversation handling
-app.post('/api/retell-webhook', handleRetellWebhook);
+app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, handleRetellWebhook);
 
 // Retell availability endpoint (uses improved handlers)
 app.post('/api/retell-availability', handleAvailabilityCheck);
