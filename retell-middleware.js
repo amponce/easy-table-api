@@ -195,6 +195,12 @@ export const formatDate = (dateString) => {
     return tomorrow.toISOString().split('T')[0];
   }
   
+  // Handle YYYY/MM/DD format (like 2025/06/13)
+  if (dateString.match(/\d{4}\/\d{1,2}\/\d{1,2}/)) {
+    const [year, month, day] = dateString.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  
   // Handle MM/DD/YYYY format
   if (dateString.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
     const [month, day, year] = dateString.split('/');
