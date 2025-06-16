@@ -67,26 +67,22 @@ async function testBooking() {
     // Test 5: Test the booking endpoint directly (validation only)
     console.log('\n5. Testing booking validation:');
     try {
-      const response = await fetch('http://localhost:3000/api/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          payload: {
-            externalID: `test-${Date.now()}`,
-            date: testBookingData.date,
-            time: testBookingData.time,
-            persons: testBookingData.persons,
-            name: testBookingData.name,
-            mobile: testBookingData.mobile,
-            comment: testBookingData.comment,
-            autoTable: true,
-            emailNotifications: 1,
-            smsNotifications: 1
-          }
-        })
+      const response = await axios.post('http://localhost:3000/api/validate', {
+        payload: {
+          externalID: `test-${Date.now()}`,
+          date: testBookingData.date,
+          time: testBookingData.time,
+          persons: testBookingData.persons,
+          name: testBookingData.name,
+          mobile: testBookingData.mobile,
+          comment: testBookingData.comment,
+          autoTable: true,
+          emailNotifications: 1,
+          smsNotifications: 1
+        }
       });
       
-      const result = await response.json();
+      const result = response.data;
       
       if (result.valid) {
         console.log('   ✅ Booking payload validation passed');
