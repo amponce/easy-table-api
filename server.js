@@ -429,21 +429,34 @@ app.post('/api/tools/get_availability', async (req, res) => {
     
     console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
     console.log(`🔍 Original request body:`, JSON.stringify(req.body, null, 2));
-    console.log(`🔍 Request headers:`, JSON.stringify(req.headers, null, 2));
+    console.log(`🔍 Raw values:`, { 
+      date_raw: req.body.date, 
+      persons_raw: req.body.persons, 
+      time_raw: req.body.time 
+    });
     
-    if (!date || !persons) {
-      console.log('❌ Missing required parameters:', { date, persons });
+    // Convert persons to number if it's a string
+    persons = parseInt(persons);
+    
+    console.log('🔍 Validation check:', { 
+      date: date, 
+      dateType: typeof date, 
+      dateValid: !!date,
+      persons: persons, 
+      personsType: typeof persons, 
+      personsValid: !isNaN(persons) && persons > 0 
+    });
+    
+    if (!date || isNaN(persons) || persons <= 0) {
+      console.log('❌ Missing or invalid required parameters:', { date, persons });
       return res.json({
         available: false,
-        alternatives: ["Please provide both date and number of people"],
+        alternatives: ["Please provide valid date and number of people"],
         dayStatus: false,
         onlineBooking: false,
         availabilityTimes: []
       });
     }
-    
-    // Convert persons to number if it's a string
-    persons = parseInt(persons);
     
     // Convert date format from YYYY/MM/DD to YYYY-MM-DD
     if (date.includes('/')) {
@@ -469,10 +482,15 @@ app.post('/api/tools/get_availability', async (req, res) => {
       console.log(`❌ Availability check failed: ${availability.error}`);
       return res.json({
         available: false,
-        alternatives: [],
+        alternatives: [
+          "I'm having trouble checking availability right now.",
+          "Please call us directly at (555) 123-4567 to make a reservation.",
+          "Or try a different date."
+        ],
         dayStatus: false,
         onlineBooking: false,
-        availabilityTimes: []
+        availabilityTimes: [],
+        error: "Availability check failed"
       });
     }
     
