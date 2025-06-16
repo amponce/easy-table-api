@@ -546,15 +546,20 @@ app.post('/api/tools/create_booking', async (req, res) => {
       console.log('✅ Booking created successfully:', result.data);
       return res.status(200).json({
         status: 200,
-        confirmation: result.data?.confirmation || result.data?.id || 'Booking confirmed',
+        confirmation: result.data?.bookingID || result.data?.confirmation || result.data?.id || 'Booking confirmed',
         message: 'Booking created successfully'
       });
     } else {
       console.log('❌ Booking failed:', result.error);
+      // Ensure we return a proper JSON object, not an array
+      const errorMessage = typeof result.error === 'string' ? result.error : 
+                          Array.isArray(result.error) ? result.error.join(', ') :
+                          JSON.stringify(result.error);
+      
       return res.status(400).json({
         status: 400,
         confirmation: null,
-        error: result.error || 'Booking failed'
+        error: errorMessage
       });
     }
     

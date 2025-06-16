@@ -154,7 +154,6 @@ export const extractBookingInfo = (transcript) => {
       break;
     }
   }
-
   
   return bookingInfo;
 };
@@ -308,7 +307,6 @@ export const formatTime = (timeString) => {
 };
 
 // Helper function to format available times for speech
-
 export const formatAvailableTimesForSpeech = (availabilityTimes) => {
   // Handle case where availabilityTimes is null, undefined, or empty
   if (!availabilityTimes || !Array.isArray(availabilityTimes) || availabilityTimes.length === 0) {
@@ -327,13 +325,11 @@ export const formatAvailableTimesForSpeech = (availabilityTimes) => {
     const period = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${displayHour}:${minutes} ${period}`;
-
   }).filter(time => time !== null); // Remove any null entries
   
   if (times.length === 0) {
     return "I'm sorry, there are no available times for that date and party size.";
   } else if (times.length === 1) {
-
     return `I have ${times[0]} available.`;
   } else if (times.length === 2) {
     return `I have ${times[0]} and ${times[1]} available.`;
