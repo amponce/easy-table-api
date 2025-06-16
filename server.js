@@ -5,6 +5,17 @@ import axios from 'axios';
 import Ajv from 'ajv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  verifyRetellSignature,
+  captureRawBody,
+  createRetellResponse,
+  extractBookingInfo,
+  checkAvailability,
+  createBooking,
+  formatDate,
+  formatTime,
+  formatAvailableTimesForSpeech
+} from './retell-middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -215,6 +226,134 @@ app.get('/api/availability', async (req, res) => {
   }
 });
 
+// Retell AI Webhook Endpoints
+
+// Main webhook endpoint for Retell AI conversation handling
+app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (req, res) => {
+  try {
+    const { event, call, transcript } = req.body;
+    
+    // Handle different Retell events
+    switch (event) {
+      case 'call_started':
+        return res.json(createRetellResponse({
+          content: "Hello! Welcome to our restaurant. I can help you make a reservation. How many people will be dining with us?"
+        }));
+        
+      case 'call_ended':
+        return res.json({ received: true });
+        
+      case 'response_required':
+        const userMessage = transcript?.filter(t => t.role === 'user').pop()?.content || '';
+        const fullTranscript = transcript?.map(t => t.content).join(' ') || '';
+        
+        // Extract booking information from the conversation
+        const bookingInfo = extractBookingInfo(fullTranscript);
+        
+        // Determine what information is still needed
+        const missing = [];
+        if (!bookingInfo.persons) missing.push('party size');
+        if (!bookingInfo.date) missing.push('date');
+        if (!bookingInfo.time) missing.push('time');
+        if (!bookingInfo.name) missing.push('name');
+        if (!bookingInfo.mobile) missing.push('phone number');
+        
+        let responseContent = '';
+        
+        if (userMessage.toLowerCase().includes('availability') || userMessage.toLowerCase().includes('available')) {
+          // User is asking about availability
+          if (bookingInfo.date && bookingInfo.persons) {
+            const formattedDate = formatDate(bookingInfo.date);
+            const availability = await checkAvailability(formattedDate, bookingInfo.persons);
+            
+            if (availability.success) {
+              responseContent = formatAvailableTimesForSpeech(availability.data);
+            } else {
+              responseContent = "I'm having trouble checking availability right now. Could you try again or call us directly?";
+            }
+          } else {
+            responseContent = "I'd be happy to check availability. Please tell me the date and how many people will be dining.";
+          }
+        } else if (missing.length === 0) {
+          // All information collected, attempt to make the booking
+          const formattedBookingData = {
+            ...bookingInfo,
+            date: formatDate(bookingInfo.date),
+            time: formatTime(bookingInfo.time)
+          };
+          
+          const bookingResult = await createBooking(formattedBookingData);
+          
+          if (bookingResult.success) {
+            responseContent = `Perfect! I've successfully made your reservation for ${bookingInfo.persons} people on ${bookingInfo.date} at ${bookingInfo.time} under the name ${bookingInfo.name}. You'll receive a confirmation via text message. Is there anything else I can help you with?`;
+          } else {
+            responseContent = `I'm sorry, I wasn't able to complete your reservation. This might be because that time slot is no longer available. Would you like me to check other available times for that date?`;
+          }
+        } else {
+          // Ask for missing information
+          if (missing.includes('party size')) {
+            responseContent = "How many people will be dining with us?";
+          } else if (missing.includes('date')) {
+            responseContent = "What date would you like to make the reservation for?";
+          } else if (missing.includes('time')) {
+            responseContent = "What time would you prefer for your reservation?";
+          } else if (missing.includes('name')) {
+            responseContent = "Great! I have the details for your reservation. Could I get your name please?";
+          } else if (missing.includes('phone number')) {
+            responseContent = "And could I get your phone number for the reservation?";
+          }
+        }
+        
+        return res.json(createRetellResponse({
+          content: responseContent
+        }));
+        
+      default:
+        return res.json({ received: true });
+    }
+  } catch (error) {
+    console.error('Retell webhook error:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Endpoint to check availability via Retell (can be called directly)
+app.post('/api/retell-availability', async (req, res) => {
+  const { date, persons, typeID } = req.body;
+  
+  if (!date || !persons) {
+    return res.status(400).json({
+      success: false,
+      error: 'Date and persons are required'
+    });
+  }
+  
+  const availability = await checkAvailability(date, persons, typeID);
+  return res.json(availability);
+});
+
+// Endpoint to create booking via Retell (can be called directly)
+app.post('/api/retell-booking', async (req, res) => {
+  const bookingData = req.body;
+  
+  // Validate required fields
+  const required = ['date', 'time', 'persons', 'name', 'mobile'];
+  const missing = required.filter(field => !bookingData[field]);
+  
+  if (missing.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: `Missing required fields: ${missing.join(', ')}`
+    });
+  }
+  
+  const result = await createBooking(bookingData);
+  return res.json(result);
+});
+
 // Serve the main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -222,4 +361,4 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   // Server started silently
-}); 
+});
