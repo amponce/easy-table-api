@@ -85,7 +85,7 @@ export const extractBookingInfo = (transcript) => {
   return bookingInfo;
 };
 
-// Helper function to call your existing availability endpoint
+// Helper function to call EasyTable availability API
 export const checkAvailability = async (date, persons, typeID = null) => {
   try {
     const apiKey = process.env.EASYTABLE_API_KEY?.trim();
@@ -129,7 +129,7 @@ export const checkAvailability = async (date, persons, typeID = null) => {
   }
 };
 
-// Helper function to create a real booking using EasyTable API directly
+// Helper function to create booking using EasyTable API
 export const createBooking = async (bookingData) => {
   try {
     const apiKey = process.env.EASYTABLE_API_KEY?.trim();
@@ -139,7 +139,7 @@ export const createBooking = async (bookingData) => {
       throw new Error('Missing EasyTable API credentials');
     }
     
-    // Format the payload according to your schema
+    // Format the payload according to EasyTable schema
     const payload = {
       externalID: `retell-${Date.now()}`,
       date: bookingData.date,
@@ -180,170 +180,6 @@ export const createBooking = async (bookingData) => {
     };
   }
 };
-
-// Add these endpoint handlers after your existing helper functions
-
-// Retell Availability Endpoint
-export const handleAvailabilityCheck = async (req, res) => {
-  try {
-    console.log('=== AVAILABILITY CHECK DEBUG ===');
-    console.log('Full body:', JSON.stringify(req.body, null, 2));
-    console.log('Headers:', req.headers);
-    
-    // Handle both Retell formats (direct params or nested under args)
-    const params = req.body.args || req.body;
-    let { date, persons, time } = params;
-    
-    console.log('Extracted params:', { date, persons, time });
-    
-    if (!date || !persons) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Date and persons are required',
-        received: params,
-        full_body: req.body
-      });
-    }
-    
-    // Format date properly
-    const formattedDate = formatDate(date);
-    console.log('Formatted date:', formattedDate);
-    
-    // Call your existing checkAvailability function
-    const result = await checkAvailability(formattedDate, persons);
-    
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error
-      });
-    }
-    
-    // Format response for Retell's expected structure
-    const response = {
-      success: true,
-      data: {
-        onlineBooking: result.data.onlineBooking === 'open',
-        dayStatus: result.data.dayStatus === 'open',
-        availabilityTimes: result.data.times || []
-      }
-    };
-    
-    console.log('Sending response:', JSON.stringify(response, null, 2));
-    return res.json(response);
-    
-  } catch (error) {
-    console.error('Availability check error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-};
-
-// Retell Booking Endpoint  
-export const handleBookingCreate = async (req, res) => {
-  try {
-    console.log('=== BOOKING CREATE DEBUG ===');
-    console.log('Full body:', JSON.stringify(req.body, null, 2));
-    
-    // Handle both Retell formats
-    const params = req.body.args || req.body;
-    let { date, time, persons, name, mobile, comment } = params;
-    
-    console.log('Extracted booking params:', { date, time, persons, name, mobile, comment });
-    
-    if (!date || !time || !persons || !name || !mobile) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required booking information',
-        required: ['date', 'time', 'persons', 'name', 'mobile'],
-        received: params
-      });
-    }
-    
-    // Format date and time
-    const formattedDate = formatDate(date);
-    const formattedTime = formatTime(time);
-    
-    console.log('Formatted booking data:', { 
-      date: formattedDate, 
-      time: formattedTime, 
-      persons, 
-      name, 
-      mobile 
-    });
-    
-    // Create the booking
-    const result = await createBooking({
-      date: formattedDate,
-      time: formattedTime,
-      persons: parseInt(persons),
-      name: name,
-      mobile: mobile.toString(),
-      comment: comment || 'Booking made via Retell AI'
-    });
-    
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error,
-        message: result.message
-      });
-    }
-    
-    // Format response for Retell
-    const response = {
-      success: true,
-      bookingID: result.data.bookingID,
-      customerID: result.data.customerID,
-      message: `Booking confirmed for ${name}`
-    };
-    
-    console.log('Booking response:', JSON.stringify(response, null, 2));
-    return res.json(response);
-    
-  } catch (error) {
-    console.error('Booking create error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-};
-
-// Main webhook handler for conversation flow
-export const handleRetellWebhook = async (req, res) => {
-  try {
-    const { name, args, call } = req.body;
-    
-    console.log('=== RETELL WEBHOOK ===');
-    console.log('Function name:', name);
-    console.log('Args:', args);
-    
-    // Route to appropriate handler based on function name
-    if (name === 'get_availability') {
-      return await handleAvailabilityCheck({ body: { args } }, res);
-    } else if (name === 'create_booking') {
-      return await handleBookingCreate({ body: { args } }, res);
-    } else {
-      // Handle other conversation events
-      return res.json({
-        success: true,
-        message: 'Webhook received'
-      });
-    }
-    
-  } catch (error) {
-    console.error('Webhook error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-};
-
-
 
 // Helper function to format date from conversation
 export const formatDate = (dateString) => {
@@ -416,5 +252,161 @@ export const formatAvailableTimesForSpeech = (availabilityData) => {
   }
 };
 
-export { retell };
+// ===== RETELL ENDPOINT HANDLERS =====
 
+// Retell Availability Endpoint
+export const handleAvailabilityCheck = async (req, res) => {
+  try {
+    // Handle both Retell formats (direct params or nested under args)
+    const params = req.body.args || req.body;
+    let { date, persons, time } = params;
+    
+    if (!date || !persons) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Date and persons are required',
+        received: params
+      });
+    }
+    
+    // Format date properly
+    const formattedDate = formatDate(date);
+    
+    // Call EasyTable availability API
+    const result = await checkAvailability(formattedDate, persons);
+    
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error
+      });
+    }
+    
+    // Format response for Retell's expected structure
+    const response = {
+      success: true,
+      data: {
+        onlineBooking: result.data.onlineBooking === 'open',
+        dayStatus: result.data.dayStatus === 'open',
+        availabilityTimes: result.data.times || []
+      }
+    };
+    
+    return res.json(response);
+    
+  } catch (error) {
+    console.error('Availability check error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+};
+
+// Retell Booking Endpoint  
+export const handleBookingCreate = async (req, res) => {
+  try {
+    // Handle both Retell formats
+    const params = req.body.args || req.body;
+    let { date, time, persons, name, mobile, comment } = params;
+    
+    if (!date || !time || !persons || !name || !mobile) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required booking information',
+        required: ['date', 'time', 'persons', 'name', 'mobile'],
+        received: params
+      });
+    }
+    
+    // Format date and time
+    const formattedDate = formatDate(date);
+    const formattedTime = formatTime(time);
+    
+    // Create the booking
+    const result = await createBooking({
+      date: formattedDate,
+      time: formattedTime,
+      persons: parseInt(persons),
+      name: name,
+      mobile: mobile.toString(),
+      comment: comment || 'Booking made via Retell AI'
+    });
+    
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error,
+        message: result.message
+      });
+    }
+    
+    // Format response for Retell
+    const response = {
+      success: true,
+      bookingID: result.data.bookingID,
+      customerID: result.data.customerID,
+      message: `Booking confirmed for ${name}`
+    };
+    
+    return res.json(response);
+    
+  } catch (error) {
+    console.error('Booking create error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+};
+
+// Main webhook handler for Retell conversation flow
+export const handleRetellWebhook = async (req, res) => {
+  try {
+    const { name, args, call, event, transcript } = req.body;
+    
+    // Handle function calls
+    if (name === 'get_availability') {
+      return await handleAvailabilityCheck({ body: { args } }, res);
+    } else if (name === 'create_booking') {
+      return await handleBookingCreate({ body: { args } }, res);
+    }
+    
+    // Handle conversation flow events
+    if (event) {
+      switch (event) {
+        case 'call_started':
+          return res.json(createRetellResponse({
+            content: "Hello! Welcome to our restaurant. I can help you make a reservation. How many people will be dining with us?"
+          }));
+          
+        case 'call_ended':
+          return res.json({ received: true });
+          
+        case 'response_required':
+          // Handle conversation flow here if needed
+          return res.json(createRetellResponse({
+            content: "I'm here to help with your reservation. What can I do for you?"
+          }));
+          
+        default:
+          return res.json({ received: true });
+      }
+    }
+    
+    // Default response for other webhook types
+    return res.json({
+      success: true,
+      message: 'Webhook received'
+    });
+    
+  } catch (error) {
+    console.error('Webhook error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+};
+
+export { retell };
