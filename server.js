@@ -432,7 +432,7 @@ app.post('/api/tools/get_availability', async (req, res) => {
     console.log(`🔍 Request headers:`, JSON.stringify(req.headers, null, 2));
     
     if (!date || !persons) {
-      console.log('❌ Missing required parameters');
+      console.log('❌ Missing required parameters:', { date, persons });
       return res.json({
         available: false,
         alternatives: ["Please provide both date and number of people"],
@@ -441,6 +441,9 @@ app.post('/api/tools/get_availability', async (req, res) => {
         availabilityTimes: []
       });
     }
+    
+    // Convert persons to number if it's a string
+    persons = parseInt(persons);
     
     // Convert date format from YYYY/MM/DD to YYYY-MM-DD
     if (date.includes('/')) {
@@ -601,8 +604,15 @@ app.post('/api/tools/create_booking', async (req, res) => {
     const bookingData = req.body;
     
     // Validate required fields according to your schema
-    const required = ['externalID', 'date', 'time', 'persons', 'name', 'mobile'];
+    const required = ['date', 'time', 'persons', 'name', 'mobile'];
     const missing = required.filter(field => !bookingData[field]);
+    
+    console.log('📋 Booking validation:', { 
+      received: Object.keys(bookingData),
+      required,
+      missing,
+      bookingData 
+    });
     
     if (missing.length > 0) {
       console.log(`❌ Missing required fields: ${missing.join(', ')}`);
@@ -686,10 +696,21 @@ app.post('/api/tools/create_booking', async (req, res) => {
     
   } catch (error) {
     console.error('❌ Create booking tool error:', error);
+    
+    // Handle axios errors properly
+    if (error.response) {
+      console.error('❌ Axios error response:', error.response.data);
+      return res.status(error.response.status).json({
+        status: error.response.status,
+        confirmation: null,
+        error: typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data)
+      });
+    }
+    
     return res.status(500).json({
       status: 500,
       confirmation: null,
-      error: 'Internal server error'
+      error: 'Internal server error: ' + error.message
     });
   }
 });
