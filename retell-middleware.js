@@ -66,26 +66,100 @@ export const extractBookingInfo = (transcript) => {
     comment: ''
   };
   
-  // Extract patterns from transcript
-  const nameMatch = transcript.match(/(?:name is|i'm|my name is)\s+([a-zA-Z\s]+)/i);
-  if (nameMatch) bookingInfo.name = nameMatch[1].trim();
+  // Extract patterns from transcript - improved regex patterns
   
-  const phoneMatch = transcript.match(/(?:phone|number|mobile)\s*(?:is)?\s*([0-9\s\-\+\(\)]+)/i);
-  if (phoneMatch) bookingInfo.mobile = phoneMatch[1].replace(/[^0-9]/g, '');
+  // Name extraction - more flexible patterns
+  const namePatterns = [
+    /(?:name is|i'm|my name is|this is|i am)\s+([a-zA-Z\s]{2,30})(?:\s|$|\.|\,)/i,
+    /^([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\s|$|\.|\,)/,  // First Last format
+  ];
   
-  const personsMatch = transcript.match(/(?:for|party of|table for)\s*(\d+)\s*(?:people|persons|guests)?/i);
-  if (personsMatch) bookingInfo.persons = parseInt(personsMatch[1]);
+  for (const pattern of namePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      const name = match[1].trim();
+      // Avoid capturing common words
+      if (!name.match(/\b(phone|number|mobile|reservation|table|people|person|guest|today|tomorrow|time|at|for|and|my|is)\b/i)) {
+        bookingInfo.name = name;
+        break;
+      }
+    }
+  }
   
-  const dateMatch = transcript.match(/(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}|today|tomorrow)/i);
-  if (dateMatch) bookingInfo.date = dateMatch[1];
+  // Phone number extraction - more flexible
+  const phonePatterns = [
+    /(?:phone|number|mobile|call me at)\s*(?:is|at)?\s*([0-9\s\-\+\(\)]{7,15})/i,
+    /\b([0-9]{3}[\-\s]?[0-9]{3}[\-\s]?[0-9]{4})\b/,  // Standard US format
+    /\b([0-9]{10,11})\b/  // 10-11 digit numbers
+  ];
   
-  const timeMatch = transcript.match(/(\d{1,2}:?\d{0,2}\s*(?:am|pm|AM|PM))/i);
-  if (timeMatch) bookingInfo.time = timeMatch[1];
+  for (const pattern of phonePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      const phone = match[1].replace(/[^0-9]/g, '');
+      if (phone.length >= 10) {
+        bookingInfo.mobile = phone;
+        break;
+      }
+    }
+  }
+  
+  // Party size extraction
+  const personsPatterns = [
+    /(?:for|party of|table for|reservation for)\s*(\d+)\s*(?:people|persons|guests|ppl)?/i,
+    /(\d+)\s*(?:people|persons|guests|ppl)/i,
+    /\b(\d+)\s*(?:of us|in our party)/i
+  ];
+  
+  for (const pattern of personsPatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      const persons = parseInt(match[1]);
+      if (persons > 0 && persons <= 20) { // Reasonable range
+        bookingInfo.persons = persons;
+        break;
+      }
+    }
+  }
+  
+  // Date extraction
+  const datePatterns = [
+    /\b(today|tonight)\b/i,
+    /\b(tomorrow)\b/i,
+    /(\d{4}-\d{2}-\d{2})/,
+    /(\d{1,2}\/\d{1,2}\/\d{4})/,
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
+  ];
+  
+  for (const pattern of datePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      bookingInfo.date = match[1];
+      break;
+    }
+  }
+  
+  // Time extraction - improved patterns
+  const timePatterns = [
+    /(?:at|for|around)\s*(\d{1,2}:?\d{0,2}\s*(?:am|pm|AM|PM))/i,
+    /\b(\d{1,2}:?\d{0,2}\s*(?:am|pm|AM|PM))\b/i,
+    /(?:at|for|around)\s*(\d{1,2})\s*(?:o'clock|oclock)/i,
+    /\b(\d{1,2}:\d{2})\b/  // 24-hour format
+  ];
+  
+  for (const pattern of timePatterns) {
+    const match = transcript.match(pattern);
+    if (match && match[1]) {
+      bookingInfo.time = match[1];
+      break;
+    }
+  }
+
   
   return bookingInfo;
 };
+// Helper function to call your existing availability endpoint
 
-// Helper function to call EasyTable availability API
 export const checkAvailability = async (date, persons, typeID = null) => {
   try {
     const apiKey = process.env.EASYTABLE_API_KEY?.trim();
@@ -129,7 +203,9 @@ export const checkAvailability = async (date, persons, typeID = null) => {
   }
 };
 
-// Helper function to create booking using EasyTable API
+
+// Helper function to create a real booking using EasyTable API directly
+
 export const createBooking = async (bookingData) => {
   try {
     const apiKey = process.env.EASYTABLE_API_KEY?.trim();
@@ -139,7 +215,9 @@ export const createBooking = async (bookingData) => {
       throw new Error('Missing EasyTable API credentials');
     }
     
-    // Format the payload according to EasyTable schema
+
+    // Format the payload according to your schema
+
     const payload = {
       externalID: `retell-${Date.now()}`,
       date: bookingData.date,
@@ -195,9 +273,11 @@ export const formatDate = (dateString) => {
     return tomorrow.toISOString().split('T')[0];
   }
   
-  // Handle YYYY/MM/DD format (like 2025/06/13)
-  if (dateString.match(/\d{4}\/\d{1,2}\/\d{1,2}/)) {
-    const [year, month, day] = dateString.split('/');
+  // Handle MM/DD/YYYY format
+  if (dateString.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+    const [month, day, year] = dateString.split('/');
+
+
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
   
@@ -228,21 +308,32 @@ export const formatTime = (timeString) => {
 };
 
 // Helper function to format available times for speech
-export const formatAvailableTimesForSpeech = (availabilityData) => {
-  if (!availabilityData || !availabilityData.length) {
+
+export const formatAvailableTimesForSpeech = (availabilityTimes) => {
+  // Handle case where availabilityTimes is null, undefined, or empty
+  if (!availabilityTimes || !Array.isArray(availabilityTimes) || availabilityTimes.length === 0) {
     return "I'm sorry, there are no available times for that date and party size.";
   }
   
-  const times = availabilityData.map(slot => {
+  const times = availabilityTimes.map(slot => {
+    // Ensure slot has a time property
+    if (!slot || !slot.time) {
+      return null;
+    }
+    
     // Convert 24-hour to 12-hour format for speech
     const [hours, minutes] = slot.time.split(':');
     const hour = parseInt(hours);
     const period = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${displayHour}:${minutes} ${period}`;
-  });
+
+  }).filter(time => time !== null); // Remove any null entries
   
-  if (times.length === 1) {
+  if (times.length === 0) {
+    return "I'm sorry, there are no available times for that date and party size.";
+  } else if (times.length === 1) {
+
     return `I have ${times[0]} available.`;
   } else if (times.length === 2) {
     return `I have ${times[0]} and ${times[1]} available.`;
@@ -252,161 +343,7 @@ export const formatAvailableTimesForSpeech = (availabilityData) => {
   }
 };
 
-// ===== RETELL ENDPOINT HANDLERS =====
-
-// Retell Availability Endpoint
-export const handleAvailabilityCheck = async (req, res) => {
-  try {
-    // Handle both Retell formats (direct params or nested under args)
-    const params = req.body.args || req.body;
-    let { date, persons } = params;
-    
-    if (!date || !persons) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Date and persons are required',
-        received: params
-      });
-    }
-    
-    // Format date properly
-    const formattedDate = formatDate(date);
-    
-    // Call EasyTable availability API
-    const result = await checkAvailability(formattedDate, persons);
-    
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error
-      });
-    }
-    
-    // Format response for Retell's expected structure
-    const response = {
-      success: true,
-      data: {
-        onlineBooking: result.data.onlineBooking === 'open',
-        dayStatus: result.data.dayStatus === 'open',
-        availabilityTimes: result.data.times || []
-      }
-    };
-    
-    return res.json(response);
-    
-  } catch (error) {
-    console.error('Availability check error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-};
-
-// Retell Booking Endpoint  
-export const handleBookingCreate = async (req, res) => {
-  try {
-    // Handle both Retell formats
-    const params = req.body.args || req.body;
-    let { date, time, persons, name, mobile, comment } = params;
-    
-    if (!date || !time || !persons || !name || !mobile) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required booking information',
-        required: ['date', 'time', 'persons', 'name', 'mobile'],
-        received: params
-      });
-    }
-    
-    // Format date and time
-    const formattedDate = formatDate(date);
-    const formattedTime = formatTime(time);
-    
-    // Create the booking
-    const result = await createBooking({
-      date: formattedDate,
-      time: formattedTime,
-      persons: parseInt(persons),
-      name: name,
-      mobile: mobile.toString(),
-      comment: comment || 'Booking made via Retell AI'
-    });
-    
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error,
-        message: result.message
-      });
-    }
-    
-    // Format response for Retell
-    const response = {
-      success: true,
-      bookingID: result.data.bookingID,
-      customerID: result.data.customerID,
-      message: `Booking confirmed for ${name}`
-    };
-    
-    return res.json(response);
-    
-  } catch (error) {
-    console.error('Booking create error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-};
-
-// Main webhook handler for Retell conversation flow
-export const handleRetellWebhook = async (req, res) => {
-  try {
-    const { name, args, call, event, transcript } = req.body;
-    
-    // Handle function calls
-    if (name === 'get_availability') {
-      return await handleAvailabilityCheck({ body: { args } }, res);
-    } else if (name === 'create_booking') {
-      return await handleBookingCreate({ body: { args } }, res);
-    }
-    
-    // Handle conversation flow events
-    if (event) {
-      switch (event) {
-        case 'call_started':
-          return res.json(createRetellResponse({
-            content: "Hello! Welcome to our restaurant. I can help you make a reservation. How many people will be dining with us?"
-          }));
-          
-        case 'call_ended':
-          return res.json({ received: true });
-          
-        case 'response_required':
-          // Handle conversation flow here if needed
-          return res.json(createRetellResponse({
-            content: "I'm here to help with your reservation. What can I do for you?"
-          }));
-          
-        default:
-          return res.json({ received: true });
-      }
-    }
-    
-    // Default response for other webhook types
-    return res.json({
-      success: true,
-      message: 'Webhook received'
-    });
-    
-  } catch (error) {
-    console.error('Webhook error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-};
-
 export { retell };
+
+
+
