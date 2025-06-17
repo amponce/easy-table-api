@@ -265,7 +265,7 @@ export const createBooking = async (bookingData) => {
     
     // Format the payload according to your schema
     const payload = {
-      externalID: bookingData.externalID || `retell-${Date.now()}`,
+      externalID: bookingData.externalID || `retell-${Date.now()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
       date: bookingData.date,
       time: bookingData.time,
       persons: parseInt(bookingData.persons),

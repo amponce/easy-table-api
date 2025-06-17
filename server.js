@@ -264,10 +264,23 @@ app.post('/api/retell-webhook', captureRawBody, verifyRetellSignature, async (re
           }));
         }
         
-        // Check for conversation exit conditions
+        // Check for conversation exit conditions and goodbye loops
+        const goodbyeCount = (fullTranscript.match(/goodbye|bye\b/gi) || []).length;
+        const thankYouCount = (fullTranscript.match(/thank you|thanks/gi) || []).length;
+        
+        // End call if too many goodbyes (indicates a loop)
+        if (goodbyeCount >= 4) {
+          console.log('🔄 Goodbye loop detected, ending call');
+          return res.json(createRetellResponse({
+            content: "Thank you for calling Jeff's Table! Have a wonderful day!",
+            end_call: true
+          }));
+        }
+        
+        // Standard goodbye detection
         if (userMessage.toLowerCase().includes('goodbye') || 
             userMessage.toLowerCase().includes('bye') || 
-            userMessage.toLowerCase().includes('thank you') ||
+            (userMessage.toLowerCase().includes('thank you') && userMessage.toLowerCase().includes('help')) ||
             userMessage.toLowerCase().includes('that\'s all') ||
             userMessage.toLowerCase().includes('no thanks')) {
           return res.json(createRetellResponse({
@@ -774,6 +787,13 @@ app.post('/api/tools/create_booking', async (req, res) => {
       emailNotifications: bookingData.emailNotifications !== undefined ? bookingData.emailNotifications : 1,
       smsNotifications: bookingData.smsNotifications !== undefined ? bookingData.smsNotifications : 1
     };
+    
+    // Generate unique external ID if not provided
+    if (!completeBookingData.externalID) {
+      const timestamp = Date.now();
+      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      completeBookingData.externalID = `retell-${timestamp}-${random}`;
+    }
     
     // Convert date to proper format if needed
     if (completeBookingData.date.includes('/')) {
