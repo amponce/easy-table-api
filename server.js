@@ -425,14 +425,14 @@ app.post('/api/debug/retell-call', (req, res) => {
 // Tool endpoint for Retell AI - handles date format conversion and returns Retell-compatible format
 app.post('/api/tools/get_availability', async (req, res) => {
   try {
-    let { date, persons, time } = req.body;
+    // Handle Retell's request format - parameters are in req.body.args
+    let { date, persons, time } = req.body.args || req.body;
     
     console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
-    console.log(`🔍 Original request body:`, JSON.stringify(req.body, null, 2));
-    console.log(`🔍 Raw values:`, { 
-      date_raw: req.body.date, 
-      persons_raw: req.body.persons, 
-      time_raw: req.body.time 
+    console.log(`🔍 Request structure:`, {
+      hasArgs: !!req.body.args,
+      directParams: { date: req.body.date, persons: req.body.persons, time: req.body.time },
+      argsParams: req.body.args
     });
     
     // Convert persons to number if it's a string
@@ -619,7 +619,8 @@ app.post('/api/tools/create_booking', async (req, res) => {
   try {
     console.log('🔧 Retell create_booking tool called:', req.body);
     
-    const bookingData = req.body;
+    // Handle Retell's request format - parameters are in req.body.args
+    const bookingData = req.body.args || req.body;
     
     // Validate required fields according to your schema
     const required = ['date', 'time', 'persons', 'name', 'mobile'];
