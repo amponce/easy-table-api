@@ -714,11 +714,15 @@ app.post('/api/tools/create_booking', async (req, res) => {
       }
     }
     
-    // Handle relative dates
+    // Handle relative dates and datetime formats
     if (completeBookingData.date === 'tonight' || completeBookingData.date === 'today') {
       const today = new Date();
       completeBookingData.date = today.toISOString().split('T')[0];
       console.log(`🔄 Converted relative date to: ${completeBookingData.date}`);
+    } else if (completeBookingData.date && completeBookingData.date.includes('T')) {
+      // Handle datetime format like "2025-06-16T19:00:00-07:00"
+      completeBookingData.date = completeBookingData.date.split('T')[0];
+      console.log(`🔄 Converted datetime to date: ${completeBookingData.date}`);
     }
     
     console.log('📝 Processed booking data:', completeBookingData);
