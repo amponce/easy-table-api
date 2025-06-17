@@ -425,14 +425,32 @@ app.post('/api/debug/retell-call', (req, res) => {
 // Tool endpoint for Retell AI - handles date format conversion and returns Retell-compatible format
 app.post('/api/tools/get_availability', async (req, res) => {
   try {
-    // Handle Retell's request format - parameters are in req.body.args
-    let { date, persons, time } = req.body.args || req.body;
+    // Handle Retell's request format - parameters can be in multiple places
+    let params;
+    
+    if (req.body.args) {
+      // Format 1: { args: { date, persons, time } }
+      params = req.body.args;
+    } else if (req.body.arguments) {
+      // Format 2: { arguments: "{\"date\":\"...\",\"persons\":...}" }
+      try {
+        params = JSON.parse(req.body.arguments);
+      } catch (e) {
+        params = {};
+      }
+    } else {
+      // Format 3: Direct { date, persons, time }
+      params = req.body;
+    }
+    
+    let { date, persons, time } = params;
     
     console.log(`🔧 Retell tool called: date=${date}, persons=${persons}, time=${time}`);
-    console.log(`🔍 Request structure:`, {
+    console.log(`🔍 Request analysis:`, {
       hasArgs: !!req.body.args,
-      directParams: { date: req.body.date, persons: req.body.persons, time: req.body.time },
-      argsParams: req.body.args
+      hasArguments: !!req.body.arguments,
+      argumentsType: typeof req.body.arguments,
+      extractedParams: params
     });
     
     // Convert persons to number if it's a string
@@ -619,8 +637,23 @@ app.post('/api/tools/create_booking', async (req, res) => {
   try {
     console.log('🔧 Retell create_booking tool called:', req.body);
     
-    // Handle Retell's request format - parameters are in req.body.args
-    const bookingData = req.body.args || req.body;
+    // Handle Retell's request format - parameters can be in multiple places
+    let bookingData;
+    
+    if (req.body.args) {
+      // Format 1: { args: { date, persons, time, ... } }
+      bookingData = req.body.args;
+    } else if (req.body.arguments) {
+      // Format 2: { arguments: "{\"date\":\"...\",\"persons\":...}" }
+      try {
+        bookingData = JSON.parse(req.body.arguments);
+      } catch (e) {
+        bookingData = {};
+      }
+    } else {
+      // Format 3: Direct { date, persons, time, ... }
+      bookingData = req.body;
+    }
     
     // Validate required fields according to your schema
     const required = ['date', 'time', 'persons', 'name', 'mobile'];
