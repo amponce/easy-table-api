@@ -192,8 +192,8 @@ app.get('/api/availability', async (req, res) => {
   try {
     const params = new URLSearchParams({
       date: date,
-      persons: persons.toString(),
-      distinct: '1' // Get distinct times only
+      persons: persons.toString()
+      // Removed distinct: '1' to match the working version
     });
     
     if (typeID) {
@@ -487,8 +487,18 @@ app.post('/api/tools/get_availability', async (req, res) => {
     // Handle "tonight" and "today" requests by using current date
     if (date === 'tonight' || date === 'today') {
       const today = new Date();
-      date = today.toISOString().split('T')[0];
-      console.log(`🔄 Converted "${req.body.date}" to current date: ${date}`);
+      // Use local date instead of UTC to match the timezone
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      date = `${year}-${month}-${day}`;
+      console.log(`🔄 Converted "${params.date}" to local date: ${date}`);
+    }
+    
+    // Ensure date is in YYYY-MM-DD format and handle timezone consistently
+    if (date && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // Date is already in correct format, but let's ensure it's treated as local date
+      console.log(`🔄 Using date as-is: ${date}`);
     }
     
     console.log(`🔍 Debug: Calling checkAvailability with date=${date}, persons=${persons}`);
@@ -513,6 +523,13 @@ app.post('/api/tools/get_availability', async (req, res) => {
     }
     
     const { dayStatus, onlineBooking, availabilityTimes } = availability.data;
+    
+    console.log(`🔍 Availability data breakdown:`, {
+      dayStatus,
+      onlineBooking,
+      availabilityTimesCount: availabilityTimes ? availabilityTimes.length : 0,
+      firstFewTimes: availabilityTimes ? availabilityTimes.slice(0, 5).map(t => t.time) : []
+    });
     
     // Check if restaurant is open and online booking is available
     if (!dayStatus || !onlineBooking) {
@@ -540,6 +557,45 @@ app.post('/api/tools/get_availability', async (req, res) => {
       });
     }
     
+    // If no availability times, check nearby dates for alternatives
+    if (!availabilityTimes || availabilityTimes.length === 0) {
+      console.log(`❌ No availability on ${date}, checking nearby dates...`);
+      
+      // Check next few days for availability
+      const alternativeDates = [];
+      for (let i = 1; i <= 3; i++) {
+        const checkDate = new Date(date + 'T00:00:00'); // Add time to avoid timezone issues
+        checkDate.setDate(checkDate.getDate() + i);
+        const checkDateStr = checkDate.toISOString().split('T')[0];
+        
+        try {
+          const altAvailability = await checkAvailability(checkDateStr, persons);
+          if (altAvailability.success && altAvailability.data.availabilityTimes && altAvailability.data.availabilityTimes.length > 0) {
+            const dateObj = new Date(checkDateStr + 'T00:00:00');
+            const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+            const monthDay = dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+            alternativeDates.push(`${dayName}, ${monthDay}`);
+          }
+        } catch (error) {
+          console.log(`❌ Error checking ${checkDateStr}:`, error.message);
+        }
+      }
+      
+      const alternatives = alternativeDates.length > 0 
+        ? [`No availability on that date. Try ${alternativeDates.join(' or ')}.`]
+        : ["No availability on that date. Please try a different date or call us directly."];
+      
+      console.log(`❌ No times available on ${date}. Suggesting: ${alternatives.join(', ')}`);
+      return res.json({
+        available: false,
+        alternatives,
+        dayStatus,
+        onlineBooking,
+        availabilityTimes: [],
+        message: `No availability on ${date}. ${alternatives[0]}`
+      });
+    }
+    
     // Check if the specific requested time is available
     const requestedTimeAvailable = availabilityTimes && availabilityTimes.some(slot => slot.time === time);
     
@@ -556,31 +612,44 @@ app.post('/api/tools/get_availability', async (req, res) => {
       // Find alternative times (closest to requested time)
       let alternatives = [];
       if (availabilityTimes && availabilityTimes.length > 0) {
+        console.log(`🔍 Processing ${availabilityTimes.length} available times to find alternatives for ${time}`);
+        
         // Get times within 2 hours of requested time
         const requestedHour = parseInt(time.split(':')[0]);
         const requestedMinute = parseInt(time.split(':')[1] || '0');
         const requestedTotalMinutes = requestedHour * 60 + requestedMinute;
+        
+        console.log(`🔍 Requested time breakdown: ${requestedHour}:${requestedMinute} = ${requestedTotalMinutes} minutes`);
         
         const nearbyTimes = availabilityTimes
           .map(slot => {
             const [hour, minute] = slot.time.split(':').map(Number);
             const totalMinutes = hour * 60 + minute;
             const diff = Math.abs(totalMinutes - requestedTotalMinutes);
-            return { ...slot, diff };
+            return { ...slot, diff, totalMinutes };
           })
           .filter(slot => slot.diff <= 120) // Within 2 hours
           .sort((a, b) => a.diff - b.diff)
-          .slice(0, 5) // Top 5 closest times
-          .map(slot => {
-            // Convert to 12-hour format for speech
-            const [hours, minutes] = slot.time.split(':');
-            const hour = parseInt(hours);
-            const period = hour >= 12 ? 'PM' : 'AM';
-            const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-            return `${displayHour}:${minutes} ${period}`;
-          });
+          .slice(0, 5); // Top 5 closest times
         
-        alternatives = nearbyTimes;
+        console.log(`🔍 Found ${nearbyTimes.length} nearby times:`, nearbyTimes.map(t => `${t.time} (diff: ${t.diff}min)`));
+        
+        alternatives = nearbyTimes.map(slot => {
+          // Convert to 12-hour format for speech
+          const [hours, minutes] = slot.time.split(':');
+          const hour = parseInt(hours);
+          const period = hour >= 12 ? 'PM' : 'AM';
+          const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+          return `${displayHour}:${minutes} ${period}`;
+        });
+        
+        console.log(`🔍 Formatted alternatives:`, alternatives);
+      } else {
+        console.log(`❌ No available times found in response`);
+        alternatives = [
+          "No times available for that date.",
+          "Try a different date or call us directly."
+        ];
       }
       
       console.log(`❌ Requested time ${time} not available. Alternatives: ${alternatives.join(', ')}`);

@@ -189,13 +189,15 @@ export const checkAvailability = async (date, persons, typeID = null) => {
     
     const params = new URLSearchParams({
       date: date,
-      persons: persons.toString(),
-      distinct: '1'
+      persons: persons.toString()
+      // Removed distinct: '1' to see if this was causing empty results
     });
     
     if (typeID) {
       params.append('typeID', typeID.toString());
     }
+    
+    console.log(`🔍 Making EasyTable API call: https://api.easytable.com/v2/availability?${params}`);
     
     const response = await axios.get(
       `https://api.easytable.com/v2/availability?${params}`,
@@ -208,11 +210,26 @@ export const checkAvailability = async (date, persons, typeID = null) => {
       }
     );
     
+    console.log(`🔍 EasyTable API response status: ${response.status}`);
+    console.log(`🔍 EasyTable API response data:`, {
+      dayStatus: response.data.dayStatus,
+      onlineBooking: response.data.onlineBooking,
+      availabilityTimesCount: response.data.availabilityTimes ? response.data.availabilityTimes.length : 0,
+      firstFewTimes: response.data.availabilityTimes ? response.data.availabilityTimes.slice(0, 3).map(t => t.time) : []
+    });
+    
     return {
       success: true,
       data: response.data
     };
   } catch (error) {
+    console.error(`❌ EasyTable API error:`, {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message
+    });
+    
     return {
       success: false,
       status: error.response?.status || 0,
