@@ -263,9 +263,14 @@ export const createBooking = async (bookingData) => {
       };
     }
     
+    // Generate unique external ID to prevent duplicates
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const uniqueExternalID = `retell-${timestamp}-${random}`;
+    
     // Format the payload according to your schema
     const payload = {
-      externalID: bookingData.externalID || `retell-${Date.now()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
+      externalID: uniqueExternalID,
       date: bookingData.date,
       time: bookingData.time,
       persons: parseInt(bookingData.persons),

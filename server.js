@@ -788,12 +788,11 @@ app.post('/api/tools/create_booking', async (req, res) => {
       smsNotifications: bookingData.smsNotifications !== undefined ? bookingData.smsNotifications : 1
     };
     
-    // Generate unique external ID if not provided
-    if (!completeBookingData.externalID) {
-      const timestamp = Date.now();
-      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-      completeBookingData.externalID = `retell-${timestamp}-${random}`;
-    }
+    // Always generate a unique external ID (overwrite any provided value to prevent duplicates)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    completeBookingData.externalID = `retell-${timestamp}-${random}`;
+    console.log(`🆔 Generated unique external ID: ${completeBookingData.externalID}`);
     
     // Convert date to proper format if needed
     if (completeBookingData.date.includes('/')) {
