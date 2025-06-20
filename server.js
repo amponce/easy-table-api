@@ -87,7 +87,244 @@ const schema = {
 const ajv = new Ajv();
 const validate = ajv.compile(schema);
 
+// ===== RETELL AI WEBHOOK ROUTES =====
+
+// Inbound call webhook - captures caller phone number and provides context
+app.post('/api/retell/inbound-webhook', (req, res) => {
+  console.log('🔥 WEBHOOK ENDPOINT HIT!');
+  try {
+    console.log('📞 Retell inbound call webhook received:', JSON.stringify(req.body, null, 2));
+    
+    // Note: Signature verification disabled for testing
+    // You can enable it later by setting up proper middleware
+    
+    // Validate webhook payload structure
+    if (!req.body.event || req.body.event !== 'call_inbound') {
+      console.log('❌ Invalid webhook event type:', req.body.event);
+      return res.status(400).json({
+        error: 'Invalid event type'
+      });
+    }
+    
+    const callInbound = req.body.call_inbound;
+    if (!callInbound) {
+      console.log('❌ Missing call_inbound data');
+      return res.status(400).json({
+        error: 'Missing call_inbound data'
+      });
+    }
+    
+    const { agent_id, from_number, to_number } = callInbound;
+    
+    console.log('📋 Call details:', {
+      agent_id,
+      from_number,
+      to_number
+    });
+    
+    // Location-based agent routing configuration
+    // Using same place token for all locations for testing
+    const sharedPlaceToken = process.env.EASYTABLE_PLACE_TOKEN;
+    
+    const locationConfig = {
+      // Main Restaurant - Your first Retell number (Default agent)
+      '+19179202226': {
+        agent_id: process.env.RETELL_DEFAULT_AGENT_ID || 'agent_default',
+        location: 'Main Restaurant',
+        address: 'New York, USA',
+        timezone: 'America/New_York',
+        opening_hours: '11:00-23:00',
+        language: 'en' // English
+      },
+      // Danish Restaurant - Your second Retell number (Danish agent)
+      '+16029950550': {
+        agent_id: process.env.RETELL_DANISH_AGENT_ID || 'agent_danish',
+        location: 'Danish Restaurant',
+        address: 'Copenhagen, Denmark',
+        timezone: 'Europe/Copenhagen',
+        opening_hours: '12:00-22:00',
+        language: 'da' // Danish
+      },
+      // Fake Danish number for testing Danish agent
+      '+4512345678': {
+        agent_id: process.env.RETELL_DANISH_AGENT_ID || 'agent_danish',
+        location: 'Restaurant København',
+        address: 'Nyhavn 12, 1051 København K',
+        timezone: 'Europe/Copenhagen',
+        opening_hours: '11:00-23:00',
+        language: 'da'
+      },
+      // Additional fake Danish numbers for multi-location testing
+      '+4587654321': {
+        agent_id: process.env.RETELL_DANISH_AGENT_ID || 'agent_danish',
+        location: 'Restaurant Aarhus',
+        address: 'Strøget 25, 8000 Aarhus C',
+        timezone: 'Europe/Copenhagen',
+        opening_hours: '12:00-22:00',
+        language: 'da'
+      },
+      // Default fallback for any other numbers
+      'default': {
+        agent_id: agent_id || process.env.RETELL_DEFAULT_AGENT_ID || 'agent_default',
+        location: 'Restaurant',
+        address: 'Denmark',
+        timezone: 'Europe/Copenhagen',
+        opening_hours: '11:00-23:00',
+        language: 'da'
+      }
+    };
+    
+    // Get location configuration based on called number
+    const locationInfo = locationConfig[to_number] || locationConfig['default'];
+    
+    console.log('🏢 Location routing:', {
+      called_number: to_number,
+      location: locationInfo.location,
+      agent_id: locationInfo.agent_id
+    });
+    
+    // Extract caller information for context
+    const callerInfo = {
+      phone: from_number,
+      restaurant_number: to_number,
+      location: locationInfo.location,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Prepare dynamic variables to pass to the agent
+    const dynamicVariables = {
+      caller_phone: from_number,
+      restaurant_phone: to_number,
+      restaurant_location: locationInfo.location,
+      restaurant_address: locationInfo.address,
+      opening_hours: locationInfo.opening_hours,
+      timezone: locationInfo.timezone,
+      language: locationInfo.language,
+      call_timestamp: callerInfo.timestamp,
+      // EasyTable configuration - using shared place token for all locations
+      easytable_place_token: sharedPlaceToken,
+      // Add any customer lookup data here if you have a customer database
+      customer_type: 'inbound_caller'
+    };
+    
+    // Optional: Look up customer information based on phone number
+    // You could add database lookup here to get customer history, preferences, etc.
+    
+    console.log('✅ Providing context to agent:', {
+      agent_id: locationInfo.agent_id,
+      location: locationInfo.location,
+      dynamic_variables: dynamicVariables
+    });
+    
+    // Response to Retell AI with agent configuration and context
+    const response = {
+      call_inbound: {
+        // Override agent based on location
+        override_agent_id: locationInfo.agent_id,
+        
+        // Optionally override agent version
+        // override_agent_version: 1,
+        
+        // Provide dynamic variables for the conversation
+        dynamic_variables: dynamicVariables,
+        
+        // Optional metadata for tracking
+        metadata: {
+          inbound_source: 'phone_call',
+          caller_phone: from_number,
+          restaurant_location: locationInfo.location,
+          restaurant_address: locationInfo.address,
+          processed_at: callerInfo.timestamp,
+          easytable_place_token: sharedPlaceToken
+        }
+      }
+    };
+    
+    console.log('📤 Responding to Retell webhook:', JSON.stringify(response, null, 2));
+    
+    return res.status(200).json(response);
+    
+  } catch (error) {
+    console.error('❌ Inbound webhook error:', error);
+    return res.status(500).json({
+      error: 'Internal server error'
+    });
+  }
+});
+
+// Optional: Create outbound phone call (for calling customers back)
+app.post('/api/retell/create-call', async (req, res) => {
+  try {
+    const { to_number, agent_id, dynamic_variables, metadata } = req.body;
+    
+    if (!to_number) {
+      return res.status(400).json({
+        error: 'to_number is required'
+      });
+    }
+    
+    if (!process.env.RETELL_API_KEY) {
+      return res.status(500).json({
+        error: 'RETELL_API_KEY not configured'
+      });
+    }
+    
+    // Your restaurant's phone number (should be configured in env)
+    const from_number = process.env.RESTAURANT_PHONE_NUMBER || '+45123456789';
+    
+    console.log('📞 Creating outbound call:', {
+      from_number,
+      to_number,
+      agent_id
+    });
+    
+    const callPayload = {
+      from_number,
+      to_number,
+      ...(agent_id && { agent_id }),
+      ...(dynamic_variables && { retell_llm_dynamic_variables: dynamic_variables }),
+      ...(metadata && { metadata })
+    };
+    
+    const response = await axios.post(
+      'https://api.retellai.com/v2/create-phone-call',
+      callPayload,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      }
+    );
+    
+    console.log('✅ Call created successfully:', response.data.call_id);
+    
+    return res.json({
+      success: true,
+      call_id: response.data.call_id,
+      call_status: response.data.call_status,
+      data: response.data
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to create call:', error.response?.data || error.message);
+    
+    return res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data || error.message
+    });
+  }
+});
+
 // ===== UTILITY API ROUTES =====
+
+// Simple test endpoint
+app.post('/api/test', (req, res) => {
+  console.log('✅ Test endpoint hit!');
+  res.json({ success: true, message: 'Test endpoint working', body: req.body });
+});
+
 app.get('/api/schema', (req, res) => {
   res.json(schema);
 });
