@@ -193,11 +193,11 @@ export const extractBookingInfo = (transcript) => {
   
   const phonePatterns = [
     // Spoken number sequence (after conversion): "45 1 2 3 4 5 6seven" or similar
-    /(?:phone|number|mobile|call me at|reach me at)\s*(?:is|at)?\s*([0-9]+(?:\s+[0-9]){6,9}(?:\w*)?)/i,
-    // International formats with country codes
-    /(?:phone|number|mobile|call me at|reach me at)\s*(?:is|at)?\s*(\+?[0-9\s\-\(\)]{8,15})/i,
-    // Danish format: +45 12 34 56 78
-    /\+45\s*([0-9\s]{8,10})/i,
+    /(?:phone|number|mobile|mobilnummer|telefonnummer|call me at|reach me at)\s*(?:is|er|at)?\s*([0-9]+(?:\s+[0-9]){6,9}(?:\w*)?)/i,
+    // International formats with country codes (English + Danish)
+    /(?:phone|number|mobile|mobilnummer|telefonnummer|call me at|reach me at)\s*(?:is|er|at)?\s*(\+?[0-9\s\-\(\)]{8,15})/i,
+    // Danish format: +45 12 34 56 78 (more specific)
+    /\+45\s*([0-9\s\-]{8,12})/i,
     // US formats
     /\b([0-9]{3}[\-\s\.]?[0-9]{3}[\-\s\.]?[0-9]{4})\b/,
     // European formats (8-15 digits with optional + and spaces/dashes)
