@@ -18,9 +18,9 @@ async function debugAvailability() {
   
   // Test different dates and parameters
   const testCases = [
-    { date: '2024-12-15', persons: 2, desc: 'Future date (Dec 15)' },
-    { date: '2024-12-20', persons: 2, desc: 'Future date (Dec 20)' },
-    { date: '2024-12-25', persons: 4, desc: 'Christmas (4 people)' },
+    { date: '2025-12-15', persons: 2, desc: 'Future date (Dec 15)' },
+    { date: '2025-12-20', persons: 2, desc: 'Future date (Dec 20)' },
+    { date: '2025-12-25', persons: 4, desc: 'Christmas (4 people)' },
     { date: new Date().toISOString().split('T')[0], persons: 2, desc: 'Today' },
     { date: new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0], persons: 2, desc: 'Tomorrow' },
   ];
@@ -70,7 +70,7 @@ async function debugAvailability() {
   console.log('🧪 Testing without distinct parameter:');
   try {
     const params = new URLSearchParams({
-      date: '2024-12-20',
+      date: '2025-12-20',
       persons: '2'
     });
     

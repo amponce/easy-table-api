@@ -55,8 +55,8 @@ const schema = {
     },
     "mobile": {
       "type": "string",
-      "pattern": "^[0-9]+$",
-      "description": "Guest phone number (digits only, including country code)"
+      "pattern": "^[+]?[0-9\\s\\-\\(\\)]{8,15}$",
+      "description": "Guest phone number (supports international formats with country codes)"
     },
     "comment": {
       "type": "string",
@@ -757,14 +757,17 @@ app.post('/api/tools/create_booking', async (req, res) => {
       });
     }
     
-    // Validate mobile phone pattern (10-11 digits)
-    const mobilePattern = /^[0-9]{10,11}$/;
-    if (!mobilePattern.test(bookingData.mobile)) {
+    // Validate mobile phone pattern (international formats)
+    const mobilePattern = /^[+]?[0-9\s\-\(\)]{8,15}$/;
+    const cleanMobile = bookingData.mobile.replace(/[\s\-\(\)]/g, '');
+    const digitCount = cleanMobile.replace(/^\+/, '').length;
+    
+    if (!mobilePattern.test(bookingData.mobile) || digitCount < 8 || digitCount > 15) {
       console.log(`❌ Invalid mobile format: ${bookingData.mobile}`);
       return res.status(400).json({
         status: 400,
         confirmation: null,
-        error: 'Mobile number must be 10-11 digits'
+        error: 'Mobile number must be 8-15 digits and may include country code'
       });
     }
     

@@ -28,8 +28,8 @@ const schema = {
     },
     "mobile": {
       "type": "string",
-      "pattern": "^[0-9]+$",
-      "description": "Guest phone number (digits only, including country code)"
+      "pattern": "^[+]?[0-9\\s\\-\\(\\)]{8,15}$",
+      "description": "Guest phone number (supports international formats with country codes)"
     },
     "comment": {
       "type": "string",

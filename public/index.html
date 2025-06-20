@@ -519,7 +519,7 @@
     </div>
 
     <script>
-        // Generate realistic near-future dates (December 2024)
+        // Generate realistic near-future dates (December 2025)
         function getTomorrowDate() {
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
@@ -778,11 +778,11 @@
             // Generate fresh unique ID
             document.getElementById('externalID').value = generateUniqueID('probe');
             
-            // Generate a random date (November-December 2024 for demo API)
+            // Generate a random date (November-December 2025 for demo API)
             const randomMonth = Math.random() < 0.5 ? 11 : 12; // November or December
             const maxDay = randomMonth === 11 ? 30 : 31;
             const randomDay = Math.floor(Math.random() * maxDay) + 1;
-            const dateStr = `2024-${randomMonth.toString().padStart(2, '0')}-${randomDay.toString().padStart(2, '0')}`;
+            const dateStr = `2025-${randomMonth.toString().padStart(2, '0')}-${randomDay.toString().padStart(2, '0')}`;
             document.getElementById('date').value = dateStr;
             
             // Generate a random time (5PM-10PM)

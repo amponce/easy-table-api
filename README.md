@@ -61,7 +61,7 @@ Validates a booking payload against the schema.
 {
   "payload": {
     "externalID": "booking-123",
-    "date": "2024-12-15",
+    "date": "2025-07-15",
     "time": "19:00",
     "persons": 4,
     "name": "John Doe",
@@ -78,7 +78,7 @@ Creates a test booking with the EasyTable API.
 {
   "payload": {
     "externalID": "booking-123",
-    "date": "2024-12-15",
+    "date": "2025-07-15",
     "time": "19:00",
     "persons": 4,
     "name": "John Doe",
@@ -157,7 +157,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for deployment instructions to various platfo
 ### Common Issues
 
 1. **API returns errors with future dates**
-   - Use a past date (e.g., `2024-12-15`) for sandbox testing
+   - Use a past date (e.g., `2025-07-15`) for sandbox testing
 
 2. **Missing credentials error**
    - Ensure `.env` file exists with valid credentials

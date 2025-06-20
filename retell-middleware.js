@@ -55,6 +55,97 @@ export const createRetellResponse = (response) => {
   };
 };
 
+// Helper function to convert Danish spoken numbers to digits
+const convertDanishSpokenNumbers = (text) => {
+  // Danish number mappings - spoken format to digits
+  const danishNumbers = {
+    // Basic numbers
+    'zero': '0', 'nul': '0',
+    'one': '1', 'en': '1', 'et': '1',
+    'two': '2', 'to': '2',
+    'three': '3', 'tre': '3',
+    'four': '4', 'fire': '4',
+    'five': '5', 'fem': '5',
+    'six': '6', 'seks': '6',
+    'seven': '7', 'syv': '7',
+    'eight': '8', 'otte': '8',
+    'nine': '9', 'ni': '9',
+    
+    // Teens
+    'ten': '10', 'ti': '10',
+    'eleven': '11', 'elleve': '11',
+    'twelve': '12', 'tolv': '12',
+    'thirteen': '13', 'tretten': '13',
+    'fourteen': '14', 'fjorten': '14',
+    'fifteen': '15', 'femten': '15',
+    'sixteen': '16', 'seksten': '16',
+    'seventeen': '17', 'sytten': '17',
+    'eighteen': '18', 'atten': '18',
+    'nineteen': '19', 'nitten': '19',
+    
+    // Tens
+    'twenty': '2', 'tyve': '2',
+    'thirty': '3', 'tredive': '3',
+    'forty': '4', 'fyrre': '4',
+    'fifty': '5', 'halvtreds': '5',
+    'sixty': '6', 'tres': '6',
+    'seventy': '7', 'halvfjerds': '7',
+    'eighty': '8', 'firs': '8',
+    'ninety': '9', 'halvfems': '9'
+  };
+  
+  let converted = text.toLowerCase();
+  
+  // Handle spoken phone numbers like "four-fifty one two three four five six seven"
+  // Danish: ones digit first, then tens digit: "four-fifty" = "54" (not "45")
+  const spokenPhonePattern = /(\w+)-(\w+)(\s+(?:\w+\s*){1,8})/g;
+  converted = converted.replace(spokenPhonePattern, (match, ones, tens, rest) => {
+    const onesDigit = danishNumbers[ones];
+    const tensDigit = danishNumbers[tens];
+    if (onesDigit && tensDigit) {
+      // Danish format: ones first, then tens: "four-fifty" → "54"
+      const spacedRest = rest.trim().replace(/(\w+)/g, ' $1 ').replace(/\s+/g, ' ');
+      return tensDigit + onesDigit + spacedRest;  // Swapped order!
+    }
+    return match;
+  });
+  
+  // Handle simple Danish pattern: "fire-halvtreds" (four-fifty) -> "54"
+  const danishPattern = /(\w+)-(\w+)/g;
+  converted = converted.replace(danishPattern, (match, ones, tens) => {
+    const onesDigit = danishNumbers[ones];
+    const tensDigit = danishNumbers[tens];
+    if (onesDigit && tensDigit) {
+      // Danish format: ones first, then tens: "four-fifty" → "54"
+      return tensDigit + onesDigit;  // Swapped order!
+    }
+    return match;
+  });
+  
+  // Replace individual number words - but ensure proper word boundaries
+  Object.keys(danishNumbers).forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    converted = converted.replace(regex, danishNumbers[word]);
+  });
+  
+  // Fix concatenated number words like "sixseven" -> "6 7"
+  // Look for specific number word patterns that got concatenated
+  const numberWords = Object.keys(danishNumbers);
+  numberWords.forEach(word1 => {
+    numberWords.forEach(word2 => {
+      if (word1 !== word2) {
+        const concatenated = word1 + word2;
+        const regex = new RegExp(`\\b${concatenated}\\b`, 'gi');
+        if (converted.includes(concatenated)) {
+          converted = converted.replace(regex, danishNumbers[word1] + ' ' + danishNumbers[word2]);
+        }
+      }
+    });
+  });
+  
+  return converted;
+};
+
 // Helper function to extract booking information from conversation
 export const extractBookingInfo = (transcript) => {
   const bookingInfo = {
@@ -96,18 +187,43 @@ export const extractBookingInfo = (transcript) => {
     }
   }
   
-  // Phone number extraction - more reliable
+  // Phone number extraction - improved for international formats
+  // First, convert any Danish spoken numbers
+  const convertedText = convertDanishSpokenNumbers(fullText);
+  
   const phonePatterns = [
-    /(?:phone|number|mobile|call me at|reach me at)\s*(?:is|at)?\s*([0-9\s\-\+\(\)]{10,15})/i,
-    /\b([0-9]{3}[\-\s\.]?[0-9]{3}[\-\s\.]?[0-9]{4})\b/,  // Standard US format
-    /\b([0-9]{10,11})\b/  // 10-11 digit numbers
+    // Spoken number sequence (after conversion): "45 1 2 3 4 5 6seven" or similar
+    /(?:phone|number|mobile|call me at|reach me at)\s*(?:is|at)?\s*([0-9]+(?:\s+[0-9]){6,9}(?:\w*)?)/i,
+    // International formats with country codes
+    /(?:phone|number|mobile|call me at|reach me at)\s*(?:is|at)?\s*(\+?[0-9\s\-\(\)]{8,15})/i,
+    // Danish format: +45 12 34 56 78
+    /\+45\s*([0-9\s]{8,10})/i,
+    // US formats
+    /\b([0-9]{3}[\-\s\.]?[0-9]{3}[\-\s\.]?[0-9]{4})\b/,
+    // European formats (8-15 digits with optional + and spaces/dashes)
+    /\b(\+?[0-9]{1,3}[\s\-]?[0-9\s\-\(\)]{7,12})\b/,
+    // Simple digit sequences (8-15 digits)
+    /\b([0-9]{8,15})\b/
   ];
   
   for (const pattern of phonePatterns) {
-    const match = fullText.match(pattern);
+    const match = convertedText.match(pattern);
     if (match && match[1]) {
-      const phone = match[1].replace(/[^0-9]/g, '');
-      if (phone.length >= 10 && phone.length <= 11) {
+      let phone = match[1];
+      
+      // Clean up phone number - remove spaces, letters, but preserve + for international
+      let cleanPhone = phone.replace(/[^\d+]/g, '');
+      
+      // For Danish numbers (8 digits without country code), add +45
+      if (cleanPhone.length === 8 && !cleanPhone.startsWith('+')) {
+        phone = '+45' + cleanPhone;
+      } else {
+        phone = cleanPhone;
+      }
+      
+      // Validate length (8-15 digits, plus optional + prefix)
+      const digitCount = phone.replace(/^\+/, '').length;
+      if (digitCount >= 8 && digitCount <= 15) {
         bookingInfo.mobile = phone;
         console.log('✅ Extracted phone:', phone);
         break;
@@ -275,7 +391,7 @@ export const createBooking = async (bookingData) => {
       time: bookingData.time,
       persons: parseInt(bookingData.persons),
       name: bookingData.name.trim(),
-      mobile: bookingData.mobile.replace(/[^0-9]/g, ''), // Clean phone number
+      mobile: bookingData.mobile.replace(/[\s\-\(\)]/g, ''), // Clean phone number but preserve + for international
       comment: bookingData.comment || 'Booking made via Retell AI phone system',
       autoTable: bookingData.autoTable !== undefined ? bookingData.autoTable : true,
       emailNotifications: bookingData.emailNotifications !== undefined ? bookingData.emailNotifications : 1,

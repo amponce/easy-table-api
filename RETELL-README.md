@@ -51,7 +51,7 @@ This middleware integrates your EasyTable restaurant booking system with Retell 
 curl -X POST https://your-domain.com/api/retell-availability \
   -H "Content-Type: application/json" \
   -d '{
-    "date": "2024-06-20",
+    "date": "2025-06-20",
     "persons": 4
   }'
 ```
@@ -61,7 +61,7 @@ curl -X POST https://your-domain.com/api/retell-availability \
 curl -X POST https://your-domain.com/api/retell-booking \
   -H "Content-Type: application/json" \
   -d '{
-    "date": "2024-06-20",
+    "date": "2025-06-20",
     "time": "19:00",
     "persons": 4,
     "name": "John Doe",
